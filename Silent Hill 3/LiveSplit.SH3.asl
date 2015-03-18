@@ -26,7 +26,7 @@ isLoading
 gameTime
 {
 	if (current.GameTimer < old.GameTimer)
-		current.AccumulatedGameTime += old.GameTimer;
+		current.AccumulatedGameTime += (old.GameTimer - current.GameTimer);
 	
 	return TimeSpan.FromSeconds(current.GameTimer + current.AccumulatedGameTime);
 } 
