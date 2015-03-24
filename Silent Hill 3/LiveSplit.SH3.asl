@@ -12,6 +12,7 @@ start
  
 reset
 {
+	current.AccumulatedGameTime = 0;
 }
  
 split
@@ -25,7 +26,7 @@ isLoading
  
 gameTime
 {
-	if (current.GameTimer < old.GameTimer)
+	if (current.GameTimer < old.GameTimer && current.GameTimer != 0)
 		current.AccumulatedGameTime += (old.GameTimer - current.GameTimer);
 	
 	return TimeSpan.FromSeconds(current.GameTimer + current.AccumulatedGameTime);
