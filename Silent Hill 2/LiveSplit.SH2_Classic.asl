@@ -18,7 +18,7 @@ split
  
 isLoading
 {
-	return false;
+	return true;
 }
  
 gameTime
