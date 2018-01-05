@@ -29,17 +29,47 @@ start
  
 reset
 {
-	return (current.gameActionType == 1 &&  old.gameActionType == 0);
+	if(current.gameActionType == 1 &&  old.gameActionType == 0)
+	{
+		vars.mapList.Clear();
+		return true;
+	}
+	else
+		return false;
 }
  
 split
 {
-	return current.level != old.level && current.level != "FRONTEND.GMX" && old.level != "FRONTEND.GMX";
+	if(current.mapName != old.mapName && current.mapName != "" && old.mapName != "" && !vars.mapList.Contains(current.mapName))
+	{
+		if(old.mapName == "PRAGUE6.GMX" && current.mapName == "FRONTEND.GMX")
+			return true;		//last split
+		else if(current.mapName != "FRONTEND.GMX")
+		{
+			vars.mapList.Add(current.mapName);
+			if(current.mapName.ToLower().StartsWith("cutscene"))
+			{
+				if(settings["splitOnCutsceneLevels"])
+					return true;
+				else
+					return false;
+			}
+			else
+			{
+				return true;
+			}
+		}
+		else
+			return false;
+	}
+	else
+		return false;
 }
 
 
 startup
 {
+	settings.Add("splitOnCutsceneLevels", false, "Split on cutscene levels.");
 	settings.Add("pauseOnSaveGameLoad", false, "Pause No-loads timer on Save game load (refer to run rules!)");
 }
 
@@ -47,6 +77,7 @@ init
 {
 	string tempFileName = modules.First().ModuleName.ToLower();
 	int tempVer = modules.First().FileVersionInfo.FilePrivatePart;
+	vars.mapList = new List<string>();
 	
 	if(tempVer == 49)
 	{
@@ -87,10 +118,10 @@ isLoading
 	//3: LevelLoad (Next level load?)
 	//4: Exit?
 	//5: Unknown (Level select? Or console map load?)
-	//6: Unknown (Something with cutscene)
+	//6: Cutscene / FMV / conversation
 	//7: Idle
 	//8: Unknown
-	//9: Pre-rendered cutscene?
+	//9: Game over menu
 	//10: Save game or Menu load
 	//11: Unknown (No strings)
 	//12: Unknown (No strings, might be wrong pointer case)
