@@ -42,25 +42,49 @@ split
 {
 	if(current.mapName != old.mapName && current.mapName != "" && old.mapName != "" && !vars.mapList.Contains(current.mapName))
 	{
-		if(old.mapName == "PRAGUE6.GMX" && current.mapName == "FRONTEND.GMX")
-			return true;		//last split
-		else if(current.mapName != "FRONTEND.GMX")
+		if(settings["splitOnEveryLevel"])
 		{
-			vars.mapList.Add(current.mapName);
-			if(current.mapName.ToLower().StartsWith("cutscene"))
+			if(old.mapName == "PRAGUE6.GMX" && current.mapName == "FRONTEND.GMX")
+				return true;		//last split
+			else if(current.mapName != "FRONTEND.GMX")
 			{
-				if(settings["splitOnCutsceneLevels"])
-					return true;
+				vars.mapList.Add(current.mapName);
+				if(current.mapName.ToLower().StartsWith("cutscene"))
+				{
+					if(settings["splitOnCutsceneLevels"])
+						return true;
+					else
+						return false;
+				}
 				else
-					return false;
+				{
+					return true;
+				}
 			}
 			else
-			{
-				return true;
-			}
+				return false;
 		}
 		else
-			return false;
+		{
+			if(old.mapName == "PRAGUE6.GMX" && current.mapName == "FRONTEND.GMX")
+				return true;		//last split
+			else if(current.mapName == "CUTSCENE\\CS_2_51A.GMX" && old.mapName == "PARIS2C.GMX") 
+				return true;
+			else if(current.mapName == "CUTSCENE\\CS_6_16.GMX" && old.mapName == "PARIS4A.GMX") 
+				return true;
+			else if(current.mapName == "CUTSCENE\\CS_7_19.GMX" && old.mapName == "PARIS6.GMX") 
+				return true;
+			else if(current.mapName == "PRAGUE3.GMX" && old.mapName == "PRAGUE2.GMX") 
+				return true;
+			else if(current.mapName == "CUTSCENE\\CS_10_14.GMX" && old.mapName == "PRAGUE3.GMX") 
+				return true;
+			else if(current.mapName == "CUTSCENE\\CS_12_1.GMX" && old.mapName == "PRAGUE4A.GMX") 
+				return true;
+			else if(current.mapName == "PRAGUE6A.GMX" && old.mapName == "CUTSCENE\\CS_14_6.GMX") 
+				return true;
+			else
+				return false;
+		}
 	}
 	else
 		return false;
@@ -69,7 +93,8 @@ split
 
 startup
 {
-	settings.Add("splitOnCutsceneLevels", false, "Split on cutscene levels.");
+	settings.Add("splitOnEveryLevel", false, "Split on every level transition (except cutscenes).");
+	settings.Add("splitOnCutsceneLevels", false, "Split on cutscene levels.", "splitOnEveryLevel");
 	settings.Add("pauseOnSaveGameLoad", false, "Pause No-loads timer on Save game load (refer to run rules!)");
 }
 
