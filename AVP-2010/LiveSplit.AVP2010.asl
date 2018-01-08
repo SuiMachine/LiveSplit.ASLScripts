@@ -1,6 +1,7 @@
 state("avp_dx11")
 {	
 	bool isActive : 0x5FFED8;
+	bool isInFrontEnd : 0x671E24;
 	bool oldIsLoadingPtr : 0x000FB610, 0x60;
 	string40 mapName : 0x5D4B5D;
 }
@@ -36,13 +37,8 @@ start
  
 reset
 {
-	if(current.mapName != old.mapName && (current.mapName == "Lab\\A01_Lab.pc" || current.mapName == "Colony\\M01_Colony.pc" || current.mapName == "P00_Tutorial\\P00_PredTutorial.pc"))
+	if((current.mapName != old.mapName || current.isInFrontEnd != old.isInFrontEnd) && (current.mapName == "Lab\\A01_Lab.pc" || current.mapName == "Colony\\M01_Colony.pc" || current.mapName == "P00_Tutorial\\P00_PredTutorial.pc") && current.isInFrontEnd)
 	{
-		vars.mapList.Clear();
-		vars.mapList.Add("Lab\\A01_Lab.pc");
-		vars.mapList.Add("Colony\\M01_Colony.pc");
-		vars.mapList.Add("P00_Tutorial\\P00_PredTutorial.pc");
-		vars.mapList.Add("Demo_SPS.pc");
 		print("[NOLOADS] Reset signal.");
 		return true;		
 	}
@@ -52,7 +48,7 @@ reset
  
 split
 {
-	if(current.mapName != old.mapName && current.mapName != "" && old.mapName != "" && !vars.mapList.Contains(current.mapName))
+	if(current.mapName != old.mapName && current.mapName != "" && old.mapName != "" && !current.isInFrontEnd)
 	{
 		return true;
 	}
@@ -66,11 +62,6 @@ split
 startup
 {
 	settings.Add("useOldIsLoading", false, "Use old isLoading pointer.");
-}
-
-init
-{
-	vars.mapList = new List<string>();
 }
 
 update
