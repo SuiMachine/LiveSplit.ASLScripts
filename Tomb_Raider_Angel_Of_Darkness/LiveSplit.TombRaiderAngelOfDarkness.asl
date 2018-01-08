@@ -1,25 +1,25 @@
 state("traod_p4", "P4_v52")
 {	
 	byte gameActionType : 0x3B6A84;
-	string20 mapName : 0x460DCA;
+	string30 mapName : 0x460DCA;
 }
 
 state("traod_p3", "P3_v52")
 {	
 	byte gameActionType : 0x3A5144;
-	string20 mapName : 0x44F48A;
+	string30 mapName : 0x44F48A;
 }
 
 state("traod_p4", "P4_v49")
 {	
 	byte gameActionType : 0x3B5A44;
-	string20 mapName : 0x45FD8A;
+	string30 mapName : 0x45FD8A;
 }
 
 state("traod_p3", "P3_v49")
 {	
 	byte gameActionType : 0x3A5104;
-	string20 mapName : 0x44F44A;
+	string30 mapName : 0x44F44A;
 }
  
 start
