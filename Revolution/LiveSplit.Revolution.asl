@@ -1,7 +1,22 @@
-state("maindll.dll")
+state("maindll.dll", "v1.0-Retail")
 {	
 	bool isLoading : 0x72760;
 	//string30 levelName : "EngineDll.dll", 0x4C066B;
+}
+
+state("maindll.dll", "v1.1-NoCD")
+{	
+	bool isLoading : "INTERFACEDLL.DLL", 0x5EA80;
+	//string30 levelName : "EngineDll.dll", 0x4C066B;
+}
+
+init
+{
+	int moduleSize = modules.First().ModuleMemorySize;
+	if(moduleSize == 479232)
+		version = "v1.1-NoCD";
+	else
+		version = "v1.0-Retail";
 }
 
 
