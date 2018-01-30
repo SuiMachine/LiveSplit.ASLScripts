@@ -4,6 +4,12 @@ state("rage")
 	string40 levelName : "", 0x11C7E41;
 }
 
+state("rage64")
+{
+	bool isShowingSpiningThing : "", 0x29B7249;
+	string40 levelName : "", 0x29BFCA2;
+}
+
 start
 {
 	return false;
