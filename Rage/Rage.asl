@@ -12,8 +12,7 @@ state("rage64")
 
 start
 {
-	return false;
-	//return current.level == "MAPS\\EPISOD_1\\e1m1.map" && !current.isLoading && old.isLoading;
+	return !current.isShowingSpiningThing && old.isShowingSpiningThing && current.levelName.EndsWith("wasteland1");
 }
 
 reset
