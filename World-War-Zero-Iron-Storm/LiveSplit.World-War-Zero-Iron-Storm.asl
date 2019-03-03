@@ -24,7 +24,7 @@ reset
 
 split
 {
-	return current.levelID > old.levelID;
+	return current.levelID > old.levelID || (current.levelID == 15 && current.gameActionType == 16);
 }
 
 isLoading
@@ -42,4 +42,5 @@ isLoading
 	//13 = Load Main Menu
 	//14 = PerformInLevelLoad
 	//15 = Restart Level (buggy?)
+	//16 = Play outro?
 }
