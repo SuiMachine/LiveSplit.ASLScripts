@@ -23,10 +23,7 @@ split
 
 update
 {
-	if(	current.isPaused != old.isPaused && current.isPaused > 1)
-		vars.IsActualLoadingFlag = true;
-	
-	if( current.loadSaveCase != old.loadSaveCase && current.loadSaveCase > 0)
+	if( current.loadSaveCase != old.loadSaveCase && (current.loadSaveCase > 0 || current.isPaused != 0))
 		vars.IsActualLoadingFlag = true;
 	else if ( current.isPaused == 0)
 		vars.IsActualLoadingFlag = false;
