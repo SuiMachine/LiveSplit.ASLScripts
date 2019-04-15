@@ -6,8 +6,6 @@ state("painkiller")
 	//"Engine.dll", 0x4FEBE68, 0xF0, 0x5D6BD4 -> *LoadingScreen (identical case for other games, just different offsets)
 	//"Engine.dll", 0x4FEBE68, 0xF0, 0x5D6BD4, 0x88-> Bool value telling whatever loading is happening
 	//"Engine.dll", 0x4FEBE68, 0xF0, 0x5D6BD4, 0x88 + 0xC-> Float value for the progress indicator (aka % of completion - but we don't use it)
-	//Issues known - the LoadingScreen object is disposed of quite a bit of time before the world simulation starts (this is especially true for Overdose and Resurrection)
-
 }
 
 state("overdose")
@@ -39,7 +37,61 @@ start
 {
 }
 
+init
+{
+	vars.oldTick = -1;
+	var gName = game.ProcessName.ToLower();
+	if(gName == "resurrection")
+	{
+		vars.tickWatcher = new MemoryWatcher<int>(new DeepPointer("ResurrectionEngine.dll", 0x2DEFE4));
+		vars.UsesTickDiff = true;
+	}
+	else if(gName == "overdose")
+	{
+		vars.tickWatcher = new MemoryWatcher<int>(new DeepPointer("OverdoseEngine.dll", 0x3E7CB0));
+		vars.UsesTickDiff = true;
+	}
+	else
+		vars.UsesTickDiff = false;
+}
+
+update
+{
+	vars.tickWatcher.Update(game);
+}
+
 isLoading
 {
-	return current.pLoadingScreen;
+	if(vars.UsesTickDiff)
+	{
+		if(current.pLoadingScreen)
+		{
+			vars.oldTick = vars.tickWatcher.Current;
+			return true;
+		}
+		else
+		{
+			if(vars.oldTick == -1)
+			{
+				return false;
+			}
+			else
+			{
+				if(vars.oldTick != vars.tickWatcher.Current)
+				{
+					//print("NOT loading because diff tick (old tick: " + vars.oldTick.ToString() + ", newTick" + vars.tickWatcher.Current.ToString() + ")");
+					vars.oldTick = -1;
+					return false;
+				}
+				else
+				{
+					//print("Loading because oldTick == currentTick: " + vars.oldTick.ToString());
+
+					return true;
+				}
+			}
+		}
+	}
+	else
+		return current.pLoadingScreen;
 }
