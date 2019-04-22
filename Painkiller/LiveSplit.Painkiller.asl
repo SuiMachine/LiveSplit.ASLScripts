@@ -51,13 +51,19 @@ init
 		vars.tickWatcher = new MemoryWatcher<int>(new DeepPointer("OverdoseEngine.dll", 0x3E7CB0));
 		vars.UsesTickDiff = true;
 	}
+	else if(gName == "recurringevil")
+	{
+		vars.tickWatcher = new MemoryWatcher<int>(new DeepPointer("REEngine.dll", 0x02DFA84));
+		vars.UsesTickDiff = true;
+	}
 	else
 		vars.UsesTickDiff = false;
 }
 
 update
 {
-	vars.tickWatcher.Update(game);
+	if(vars.UsesTickDiff)
+		vars.tickWatcher.Update(game);
 }
 
 isLoading
