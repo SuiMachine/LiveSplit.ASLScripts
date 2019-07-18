@@ -1,6 +1,7 @@
 state("SoF2")
 {
 	string20 level : 0x7820DD;
+	bool skippingCin: 0x409680;
 }
 
 init
@@ -15,20 +16,20 @@ update
 
 start
 {
-	return current.level == "pra1.bsp" && vars.cGamexTick != 0;
+	return current.level == "pra2.bsp" && !current.skippingCin && old.skippingCin;
 }
 
 reset
 {
-	return current.level == "pra1.bsp" && old.level != "pra1.bsp" && vars.cGamexTick == 0;
+	return current.level == "pra2.bsp" && old.level != "pra2.bsp" && vars.cGamexTick == 0;
 }
 
 split
 {
-	return (old.level != "pra1.bsp") && current.level != old.level;
+	return (old.level != "pra1.bsp" && current.level != "pra1.bsp") && current.level != old.level;
 }
 
 isLoading
 {
-	return vars.cGamexTick == 0;
+	return vars.cGamexTick == 0 || current.skippingCin;
 }
