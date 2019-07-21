@@ -16,7 +16,10 @@ update
 
 start
 {
-	return current.level == "pra2.bsp" && !current.skippingCin && old.skippingCin;
+	if(settings["startOnCutscene"])
+		return current.level == "pra2.bsp" && !current.skippingCin && old.skippingCin;
+	else
+		return current.level == "pra2.bsp" && vars.cGamexTick != 0;
 }
 
 reset
@@ -31,5 +34,11 @@ split
 
 isLoading
 {
-	return vars.cGamexTick == 0 || current.skippingCin;
+	return vars.cGamexTick == 0 || (settings["pauseOnCutscene"] && current.skippingCin );
+}
+
+startup
+{
+	settings.Add("pauseOnCutscene", true, "Pause on cutscenes skipping.");
+	settings.Add("startOnCutscene", true, "Start on cutscene skip instead of level load.");
 }
