@@ -1,11 +1,12 @@
 state("psiops")
 {
-	bool isLoading: 0x68B4D4;
+	uint loaderInstance: 0x68B4E8;
 	string8 levelName: 0x68AF2C;
 }
 
 init
 {
+
 	vars.IgnoreLevels = new List<string>()
 	{
 		"97" //menu
@@ -14,7 +15,7 @@ init
 
 start
 {
-	return !current.isLoading && old.isLoading && current.levelName == "00";
+	return current.loaderInstance == 0 && old.loaderInstance != 0 && current.levelName == "00";
 }
  
 reset
@@ -37,5 +38,5 @@ split
  
 isLoading
 {
-	return current.isLoading;
+	return current.loaderInstance != 0;
 }
