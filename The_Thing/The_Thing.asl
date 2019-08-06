@@ -1,26 +1,27 @@
 state("TheThing")
 {
-    string9 intro : 0x521A28;
-    string3 level : 0x521A31;
+    string12 level : 0x521A28;
     bool isNotLoading : 0x519E20;
-}
-
-init
-{
-}
-
-update
-{
 }
 
 split
 {
-	return current.level != old.level;
+    if (current.level != old.level)
+    {
+        if (current.level == "gui_level6")
+        {
+            return old.level == "gui_level4a";
+        }
+        else 
+        {
+            return true;
+        }
+    }
 }
 
 start
 {
-    return current.intro == "gui_level" && old.intro != "gui_level";
+    return old.level == "gui_intro" && current.level == "gui_level1";
 }
 
 isLoading
