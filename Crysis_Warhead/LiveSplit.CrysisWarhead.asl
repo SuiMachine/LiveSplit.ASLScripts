@@ -1,36 +1,18 @@
-state("crysis64", "64_DX9")
+state("crysis64")
 {
-	bool isLoading: "CryRenderD3D9.dll", 0x6694E5;
-}
-
-state("crysis64", "64_DX10")
-{
-	bool isLoading: "CryRenderD3D10.dll", 0x630055;
+	int levelLoadId : 0x7C9180, 0x4d8, 0xA0;	
+	int levelLoadIterator : 0x7C9180, 0x4d8, 0xB0;	
+	string20 levelName : 0x7C9180, 0x4d8, 0x88, 0x0;
 }
 
 init
 {
-	foreach(ProcessModuleWow64Safe module in modules)
-    {
-		Debug.WriteLine("Module check...");
-		if(module.ModuleName.ToLower() == "cryrenderd3d9.dll")
-		{
-			version = "64_DX9";
-			Debug.WriteLine("Chosen DX9");
-			break;
-		}
-        else if(module.ModuleName.ToLower() == "cryrenderd3d10.dll")
-		{
-			version = "64_DX10";
-			Debug.WriteLine("Chosen DX9");
-			break;
-		}
-	}
 	vars.isLoading = false;
 }
  
 start
 {
+	return current.levelLoadId != old.levelLoadId;
 }
  
 reset
@@ -39,6 +21,7 @@ reset
  
 split
 {
+	return current.levelName != old.levelName;
 }
  
 isLoading
@@ -48,5 +31,8 @@ isLoading
 
 update
 {
-	vars.isLoading = current.isLoading;
+	if(current.levelLoadIterator == 0)
+		vars.isLoading = true;
+	else if(current.levelLoadId != old.levelLoadId)
+		vars.isLoading = false;
 }
