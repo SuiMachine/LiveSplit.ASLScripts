@@ -1,3 +1,10 @@
+state("crysis")
+{
+	float loadTimeIsh : "CryAction.dll", 0x2DA22C, 0x4AC, 0x50;	//Honestly no idea what that is, but it seems to be float
+	int levelLoadId : "CryAction.dll", 0x2DA22C, 0x4AC, 0x5C;	
+	string20 levelName : "CryAction.dll", 0x2DA22C, 0x4AC, 0x48, 0x0;
+}
+
 state("crysis64")
 {
 	float loadTimeIsh : "CryGame.dll", 0x3F6D20, 0x10, 0x4d8, 0x94;	//Honestly no idea what that is, but it seems to be float
