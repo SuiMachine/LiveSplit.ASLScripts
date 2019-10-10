@@ -24,7 +24,6 @@ state("gta2", "v11.44")
 {
     bool ingame: 0x1EE068;
 	bool pause: 0x1ECB58;
-	bool missionScript: 0x2744BC;
 	uint requiredScore: 0x2744BC, 0x310;
     uint mission: 0x2744BC, 0x328, 0x0;
     uint token: 0x1FC5E4;
@@ -55,23 +54,50 @@ startup
 		settings.Add("ID_"+i, true, "Mission "+i, "Industrial");
 	} 
   
-	/// Token and Frenzy Settings
+	/// Token Settings
 	settings.Add("Token", false, "Tokens");
-	settings.SetToolTip("Token", "Split after each collected token.");
+	settings.Add("Downtown_t", true, "Downtown", "Token");
+	settings.SetToolTip("Downtown_t", "Select at which token count in the Downtown area you want to split.");
+	settings.Add("Residential_t", true, "Residential", "Token");
+	settings.SetToolTip("Residential_t", "Select at which token count in the Residential area you want to split.");
+	settings.Add("Industrial_t", true, "Industrial", "Token");
+	settings.SetToolTip("Industrial_t", "Select at which token count in the Industrial area you want to split.");
+	// Add checkbox for every token in each area
+	for (int i = 1; i <= 50; i++)
+	{
+		settings.Add("DT_Token_"+i, true, "Token "+i, "Downtown_t");
+		settings.Add("RS_Token_"+i, true, "Token "+i, "Residential_t");
+		settings.Add("ID_Token_"+i, true, "Token "+i, "Industrial_t");
+	} 
+	
+	//Frenzy Settings
 	settings.Add("Frenzy", false, "Frenzies");
-	settings.SetToolTip("Frenzy", "Split after each completed kill frenzy.");
+	settings.Add("Downtown_f", true, "Downtown", "Frenzy");
+	settings.SetToolTip("Downtown_f", "Select at which frenzy count in the Downtown area you want to split.");
+	settings.Add("Residential_f", true, "Residential", "Frenzy");
+	settings.SetToolTip("Residential_f", "Select at which frenzy count in the Residential area you want to split.");
+	settings.Add("Industrial_f", true, "Industrial", "Frenzy");
+	settings.SetToolTip("Industrial_f", "Select at which frenzy count in the Industrial area you want to split.");
+	// Add checkbox for every frenzy in each area
+	for (int i = 1; i <= 20; i++)
+	{
+		settings.Add("DT_Frenzy_"+i, true, "Frenzy "+i, "Downtown_f");
+		settings.Add("RS_Frenzy_"+i, true, "Frenzy "+i, "Residential_f");
+		settings.Add("ID_Frenzy_"+i, true, "Frenzy "+i, "Industrial_f");
+	} 
 
 	/// Ingame to menu transition Settings
 	settings.Add("Transition", false, "Split on any ingame to menu transition");
 	settings.SetToolTip("Transition", "Split on any ingame to menu transitions ignoring required score or missions.");
 	
 	vars.frames = 0;
-	vars.startFrames = 0;
-	vars.diffFrames = 0;
 	vars.splitTime = TimeSpan.Zero;
 	vars.startTime = TimeSpan.Zero;
 	vars.igt = TimeSpan.Zero;
 	vars.avgFps = 0;
+	vars.startFrames = 0;
+	vars.diffFrames = 0;
+	vars.gameStartCount = 0;
 }
 
 init
@@ -88,6 +114,7 @@ init
     {
         version = "v11.44";
     }
+	vars.gameStartCount = 0;
 }
 
 update
@@ -96,8 +123,6 @@ update
 	
 	if (current.ingame)
 	{
-	    //if (!old.ingame || ((current.pause != old.pause) && old.pause)) {vars.startTime = timer.CurrentTime.RealTime;}
-		
 	    if (current.cycle == 1) 
 		{
 		  vars.startTime = timer.CurrentTime.RealTime;
@@ -115,9 +140,13 @@ update
 		
 		vars.frames = current.cycle-1;
 		vars.splitTime = timer.CurrentTime.RealTime - vars.startTime;
-		vars.igt = TimeSpan.FromSeconds(vars.frames/30.3);
+		vars.igt = TimeSpan.FromSeconds(vars.frames/30.3).ToString(@"m\:ss\.ff");
 		vars.diffFrames = vars.frames-vars.startFrames;
-		if (!current.pause && (vars.diffFrames > 0)) {vars.avgFps = (vars.diffFrames)/vars.splitTime.TotalSeconds;}		
+		
+		if (vars.diffFrames > 0) 
+		{
+			vars.avgFps = ((vars.diffFrames * 1000.0) / vars.splitTime.TotalMilliseconds).ToString("0.00");	
+		}		
 	}
 	else
 	{		
@@ -132,9 +161,13 @@ start
 	if (current.ingame && vars.score == 0 && vars.requiredScore != 0 && !vars.runActive)
 	{   
 		vars.missionCount = 0U;
+		vars.tokenCount = 0U;
+		vars.frenzyCount = 0U;
 		vars.runActive = true;
 		vars.startTime = TimeSpan.Zero;
 		vars.startFrames = 0;
+		if (vars.requiredScore == 1000000)
+			vars.gameStartCount++;
 		return true; 
 	}
 }
@@ -182,13 +215,46 @@ split
 			return true;
 		} 
 	}
+	//split on selected tokens
 	else if (settings["Token"] && current.token - old.token == 1) 
 	{
-		return true;
+	    
+	    vars.tokenCount = current.token;
+		//Downtown tokens		
+	    if (settings["Downtown_t"] && vars.requiredScore == 1000000 && settings["DT_Token_"+vars.tokenCount])
+		{
+		  return true;
+		}
+		//Residential tokens
+		if (settings["Residential_t"] && vars.requiredScore == 3000000 && settings["RS_Token_"+vars.tokenCount])
+		{
+		  return true;
+		}
+		//Industrial tokens
+		if (settings["Industrial_t"] && vars.requiredScore == 5000000 && settings["ID_Token_"+vars.tokenCount])
+		{
+		  return true;
+		}
 	}
+	//split on selected frenzies
 	else if (settings["Frenzy"] && current.frenzy - old.frenzy == 1) 
 	{
-		return true;
+	    vars.frenzyCount = current.frenzy;
+		//Downtown frenzies		
+	    if (settings["Downtown_f"] && vars.requiredScore == 1000000 && settings["DT_Frenzy_"+vars.frenzyCount])
+		{
+		  return true;
+		}
+		//Residential frenzies
+		if (settings["Residential_f"] && vars.requiredScore == 3000000 && settings["RS_Frenzy_"+vars.frenzyCount])
+		{
+		  return true;
+		}
+		//Industrial frenzies
+		if (settings["Industrial_f"] && vars.requiredScore == 5000000 && settings["ID_Frenzy_"+vars.frenzyCount])
+		{
+		  return true;
+		}
 	}
 }
 
@@ -197,8 +263,6 @@ reset
 	// Reset on every new game start
 	if (settings.ResetEnabled && current.ingame && !vars.runActive && vars.score == 0 && vars.requiredScore != 0)
 	{ 
-	    vars.startTime = TimeSpan.Zero;
-		vars.startFrames = 0;
 		return true;
 	} 
 	// Prevents timer to restart automatically on manual reset if previously menu was visited with the timer running
