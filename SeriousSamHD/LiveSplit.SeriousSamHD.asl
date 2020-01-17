@@ -1,6 +1,5 @@
 state("samhd")
 {	
-	byte menuType: 0x10D7E5EC;
 }
 
 startup
@@ -30,8 +29,8 @@ startup
 
 init
 {
-	vars.originalStartLoadAddy = 0x0048E4BF;
-	vars.originalEndLoadAddy = 0x0048E50A;
+	vars.originalStartLoadAddy = 0x007C5CFF;
+	vars.originalEndLoadAddy = 0x007C5D4A;
 
 	vars.injectedIsLoadingPtr = game.AllocateMemory(sizeof(int));
 	vars.isLoadingPtrBytes = BitConverter.GetBytes((uint)vars.injectedIsLoadingPtr);
@@ -48,7 +47,7 @@ init
 	};
 	contentOfInjectionCode.AddRange(vars.isLoadingPtrBytes);
 	contentOfInjectionCode.AddRange(new byte[] { 1, 0, 0, 0 });	
-	contentOfInjectionCode.AddRange(new byte[] {0x68, 0xA4, 0xA1, 0xC3, 0x00 });		//push Started loading world %1
+	contentOfInjectionCode.AddRange(new byte[] {0x68, 0xD8, 0x57, 0xD1, 0x00 });		//push Started loading world %1
 	contentOfInjectionCode.AddRange(new byte[] {0xE9, 0xFF, 0xFF, 0xFF, 0xFF });   		//jmp PLACEHOLDER
 	
 	//2nd injection
@@ -56,7 +55,7 @@ init
 	contentOfInjectionCode.AddRange(new byte[] { 0xC7, 0x05 });							//mov [injectedIsLoadingPtr],0
 	contentOfInjectionCode.AddRange(vars.isLoadingPtrBytes);
 	contentOfInjectionCode.AddRange(new byte[] { 0, 0, 0, 0 });	
-	contentOfInjectionCode.AddRange(new byte[] {0x68, 0xA0, 0xAD, 0xC0, 0x00 });		//push Started loading world %1
+	contentOfInjectionCode.AddRange(new byte[] {0x68, 0xBC, 0x57, 0xD1, 0x00 });		//push Started loading world %1
 	contentOfInjectionCode.AddRange(new byte[] {0xE9, 0xFF, 0xFF, 0xFF, 0xFF });   		//jmp PLACEHOLDER
 	
 	vars.injectedStartLoadHookPtr = game.AllocateMemory(contentOfInjectionCode.Count);
