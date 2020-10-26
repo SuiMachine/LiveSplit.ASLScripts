@@ -61,9 +61,13 @@ state("recurringevil")
 
 startup
 {
+	//Some vars
 	vars.StartUpLevels = new List<string>();
 	vars.LevelsLoaded = new List<string>();
 	vars.IsRunStart = false;
+	
+	//Settings
+	settings.Add("IgnoreStartupMaps", false, "Don't split on startup maps");
 	
 	//Event handler to clear levels loaded on reset (cause player may do it manually)
 	timer.OnReset += (s, val) => { 
@@ -162,7 +166,11 @@ split
 			{
 				print("[NOLOADS] Adding \"" + current.pLevelName + "\" to the list of loaded levels.");
 				vars.LevelsLoaded.Add(current.pLevelName);
-				return true;
+				
+				if(!settings["IgnoreStartupMaps"])
+					return true;
+				else
+					return !vars.StartUpLevels.Contains(current.pLevelName);
 			}
 			else
 				return false;
