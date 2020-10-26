@@ -13,7 +13,7 @@ state("painkiller", "Steam")
 	
 	//And then if you want to be bothered there is:
 	//"Engine.dll", 0x4FEBE68, 0xF0, 0x5D6BD4, 0x88 + 0xC-> Float value for the progress indicator (aka % of completion - but we don't use it)
-	bool pLoadingScreen : "Engine.dll", 0x4FEBE68, 0xF0, 0x5D6BD4, 0x9C;
+	bool pLoadingScreen : "Engine.dll", 0x4FEBE68, 0xF0, 0x5D6BD4, 0x88;
 	
 	//To get a tick, find an extern function PCFSystem::TickEngine
 	//In it, somewhere after middle you'll find a call to a function SystemDriver::GetCurrentTimeMS
