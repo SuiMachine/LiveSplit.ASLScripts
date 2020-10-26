@@ -59,12 +59,47 @@ state("recurringevil")
 	string25 pLevelName : "REEngine.dll", 0x4EE60B8, 0x64, 0x01888, 0x0;
 }
 
+startup
+{
+	vars.StartUpLevels = new List<string>();
+	vars.LevelsLoaded = new List<string>();
+	vars.IsRunStart = false;
+	
+	//Event handler to clear levels loaded on reset (cause player may do it manually)
+	timer.OnReset += (s, val) => { 
+		//print("[NOLOADS] Clearing list of loaded levels.");
+		vars.LevelsLoaded.Clear(); 
+	};
+	
+	//This is a stupid workaround, as you can not define event handler that uses values from State Descriptors, so we just do it in update instead based on the flag
+	timer.OnStart += (s, args) => { 
+		vars.IsRunStart = true;
+	};
+}
+
+update
+{
+	if(vars.IsRunStart)
+	{
+		if(current.pLevelName != "")
+		{
+			print("[NOLOADS] Adding a startup level to the list of loaded levels " + current.pLevelName);
+			vars.LevelsLoaded.Add(current.pLevelName);
+		}
+		vars.IsRunStart = false;
+	}
+}
+
+
 init
 {
+	//Pause timer if game quits or crashes...
+	game.Exited += (s, e) => timer.IsGameTimePaused = true;
+
 	vars.oldTick = -1;
 	vars.OldLevelName = "";
 	var ProcessNameLowered = game.ProcessName.ToLower();
-		
+	
 	if(ProcessNameLowered == "painkiller")
 	{
 		var tempModule = modules.FirstOrDefault(x =>  x.ModuleName.ToLower() == "engine.dll");
@@ -100,18 +135,9 @@ init
 		vars.StartUpLevels = new List<string>() { "C10L1_Unfortunate_Abbey" };
 }
 
-startup
-{
-	vars.StartUpLevels = new List<string>();
-}
-
-reset
-{
-}
-
 start
 {
-	if(!current.pLoadingScreen && current.pLoadingScreen != old.pLoadingScreen && current.pLevelName != "" )
+	if(!current.pLoadingScreen && current.pLevelName != "" && current.pLoadingScreen != old.pLoadingScreen  )
 	{
 		vars.OldLevelName = current.pLevelName;
 		return vars.StartUpLevels.Contains(current.pLevelName);
@@ -120,15 +146,26 @@ start
 		return false;
 }
 
+reset
+{
+}
+
 split
 {
-	if(current.pLevelName != "")
+	if(current.pLevelName != null && current.pLevelName != "")
 	{
 		if(current.pLevelName != vars.OldLevelName)
 		{
-			print("[NOLOADS] Map changed from " + vars.OldLevelName + " to " + current.pLevelName);
+			print("[NOLOADS] Map changed from \"" + vars.OldLevelName + "\" to \"" + current.pLevelName +"\"");
 			vars.OldLevelName = current.pLevelName;
-			return current.pLevelName != "";
+			if(!vars.LevelsLoaded.Contains(current.pLevelName))
+			{
+				print("[NOLOADS] Adding \"" + current.pLevelName + "\" to the list of loaded levels.");
+				vars.LevelsLoaded.Add(current.pLevelName);
+				return true;
+			}
+			else
+				return false;
 		}
 		return false;
 	}
@@ -142,6 +179,8 @@ isLoading
 		vars.oldTick = current.pTick;
 		return true;
 	}
+	else if(current.pLevelName == "")
+		return true;
 	else
 	{
 		if(vars.oldTick == -1)
