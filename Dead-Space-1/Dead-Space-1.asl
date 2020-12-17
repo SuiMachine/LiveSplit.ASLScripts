@@ -6,7 +6,7 @@ state("Dead Space")
 
 start
 {
-	return current.gameState != old.gameState && current.gameState == 0 && current.level == "CH01_flt\\";
+	return current.gameState != old.gameState && current.gameState == 0 && current.chapterName == "CH01_flt\\";
 }
 
 split
