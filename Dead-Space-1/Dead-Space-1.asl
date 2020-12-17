@@ -1,9 +1,20 @@
 state("Dead Space")
 {
-	int loading: "Dead Space.exe", 0xD6F328;
+	int gameState: 0xB442B8;
+	string10 chapterName: 0x00B648DC, 0x9C;
+}
+
+start
+{
+	return current.gameState != old.gameState && current.gameState == 0 && current.level == "CH01_flt\\";
+}
+
+split
+{
+	return current.chapterName != old.chapterName && current.chapterName != "frontend\\" && old.chapterName != "frontend\\";
 }
 
 isLoading
 {
-	return current.loading != 0;
+	return current.gameState != 0 && current.gameState != 4;
 }
