@@ -3,8 +3,8 @@
 
 state("viscerafest")
 {
-	int gameState : "mono-2.0-bdwgc.dll", 0x497DC8, 0x38, 0xF08, 0x0, 0x60, 0x0;	//inside GameManager
-	bool loadingQuickSave : "mono-2.0-bdwgc.dll", 0x497DC8, 0x38, 0xF08, 0x0, 0x60, 0x45;
+	//int gameState : "mono-2.0-bdwgc.dll", 0x497DC8, 0x38, 0xF08, 0x0, 0x60, 0x0;	//inside GameManager
+	//bool loadingQuickSave : "mono-2.0-bdwgc.dll", 0x497DC8, 0x38, 0xF08, 0x0, 0x60, 0x45;
 }
 
 startup
@@ -33,52 +33,102 @@ startup
 
 init
 {
+	vars.SigFound = false;
+	vars.TokenSource = new CancellationTokenSource();
 	vars.CompletedSplits = new List<string>();
-
-	var UnityPlayerModule = modules.FirstOrDefault(m => m.ModuleName == "UnityPlayer.dll");
-	var UnityPlayerScanner = new SignatureScanner(game, UnityPlayerModule.BaseAddress, UnityPlayerModule.ModuleMemorySize);
+	current.ThisScene = "";
+	current.NextScene = "";
+	current.gameState = 0;
+	current.loadingQuickSave = false;
+	vars.UpdateScenes = (Action) (() => {});
 	
-	//SceneManagerBindings::GetActiveScene
-	var SceneManagerBindingsSig = new SigScanTarget(5, "48 83 EC 28" +
-		"E8 ?? ?? ?? ??" +
-		"48 8B C8" +
-		"E8 ?? ?? ?? ??" +
-		"48 85 C0" +
-		"74 08" +
-		"8B 40 08" +
-		"48 83 C4 28" +
-		"C3" +
-		"48 83 C4 28" +
-		"C3");
-	SceneManagerBindingsSig.OnFound = (p, s, ptr) => IntPtr.Add(ptr + 4, p.ReadValue<int>(ptr));
-
-	var SceneManagerBindings = IntPtr.Zero;
-
-	int scanAttempts = 0;
-	while (scanAttempts++ < 50)
-		if ((SceneManagerBindings = UnityPlayerScanner.Scan(SceneManagerBindingsSig)) != IntPtr.Zero) break;
-
-	if (!(vars.SigFound = SceneManagerBindings != IntPtr.Zero))
+	vars.SigThread = new Thread(() =>
 	{
-		print("Not found: " + SceneManagerBindings.ToString("X8"));
-		return;
-	}
-	
-	print("Mov instruction of g_RuntimeSceneManager: " + SceneManagerBindings.ToString("X8"));
-	var g_RuntimeSceneManager = IntPtr.Add(SceneManagerBindings + 7, game.ReadValue<int>(SceneManagerBindings + 3));
-	print("RuntimeSceneManager at: " + g_RuntimeSceneManager.ToString("X8"));
+		print("Starting signature thread.");
+		
+		var SceneManagerBindings = IntPtr.Zero;
+		var GameManager = IntPtr.Zero;
+		
+		//SceneManagerBindings::GetActiveScene
+		var SceneManagerBindingsSig = new SigScanTarget(5, "48 83 EC 28" +
+			"E8 ?? ?? ?? ??" +
+			"48 8B C8" +
+			"E8 ?? ?? ?? ??" +
+			"48 85 C0" +
+			"74 08" +
+			"8B 40 08" +
+			"48 83 C4 28" +
+			"C3" +
+			"48 83 C4 28" +
+			"C3");
+		SceneManagerBindingsSig.OnFound = (p, s, ptr) => IntPtr.Add(ptr + 4, p.ReadValue<int>(ptr));
+		
+		//GameManager
+		var GameManagerSig = new SigScanTarget(3, "48 8B 05 ???????? 48 0F 45 C1");
+		GameManagerSig.OnFound = (p, s, ptr) => IntPtr.Add(ptr + 4, p.ReadValue<int>(ptr)) + 0x18;
+		
+		var Token = vars.TokenSource.Token;
+		while (!Token.IsCancellationRequested)
+		{
+			var GameModules = game.ModulesWow64Safe();
+			
+			var MonoModule = GameModules.FirstOrDefault(m => m.ModuleName == "mono-2.0-bdwgc.dll");
+			var UnityPlayerModule = GameModules.FirstOrDefault(m => m.ModuleName == "UnityPlayer.dll");
+			
+			if (MonoModule == null || UnityPlayerModule == null)
+			{
+				Thread.Sleep(2000);
+				continue;
+			}
+			
+			var UnityPlayerScanner = new SignatureScanner(game, UnityPlayerModule.BaseAddress, UnityPlayerModule.ModuleMemorySize);
+			var MonoScanner = new SignatureScanner(game, MonoModule.BaseAddress, MonoModule.ModuleMemorySize);
+			
+			if (SceneManagerBindings == IntPtr.Zero && (SceneManagerBindings = UnityPlayerScanner.Scan(SceneManagerBindingsSig)) != IntPtr.Zero)
+			{
+				//print("Mov instruction of SceneManagerBindings: " + SceneManagerBindings.ToString("X8"));
+				SceneManagerBindings = IntPtr.Add(SceneManagerBindings + 7, game.ReadValue<int>(SceneManagerBindings + 3));
+				print("Found SceneManagerBinding: 0x" + SceneManagerBindings.ToString("X16"));
+			}
+			
 
-	Func<string, string> PathToName = (path) =>
-	{
-		if (String.IsNullOrEmpty(path) || !path.StartsWith("Assets/")) return null;
-		else return System.Text.RegularExpressions.Regex.Matches(path, @".+/(.+).unity")[0].Groups[1].Value;
-	};
-	
-	vars.UpdateScenes = (Action) (() =>
-	{
-		current.ThisScene = PathToName(new DeepPointer(g_RuntimeSceneManager, 0x48, 0x10, 0x0).DerefString(game, 73)) ?? old.ThisScene;
-		current.NextScene = PathToName(new DeepPointer(g_RuntimeSceneManager, 0x28, 0x0, 0x10, 0x0).DerefString(game, 73)) ?? old.NextScene;
+			if (GameManager == IntPtr.Zero && (GameManager = MonoScanner.Scan(GameManagerSig)) != IntPtr.Zero)
+				print("Found GameManager: 0x" + GameManager.ToString("X16"));
+				
+			vars.SigFound = GameManager != IntPtr.Zero && SceneManagerBindings != IntPtr.Zero;
+
+			if (!vars.SigFound)
+			{
+				Thread.Sleep(2000);
+				if(GameManager == IntPtr.Zero)
+					print("Game Manager is null");
+				if(SceneManagerBindings == IntPtr.Zero)
+					print("Scene Manager is null");
+			}
+			else
+			{
+				Func<string, string> PathToName = (path) =>
+				{
+					if (String.IsNullOrEmpty(path) || !path.StartsWith("Assets/"))
+						return null;
+					else
+						return System.Text.RegularExpressions.Regex.Matches(path, @".+/(.+).unity")[0].Groups[1].Value;
+				};
+			
+				vars.UpdateScenes = (Action) (() =>
+				{
+					current.ThisScene = PathToName(new DeepPointer(SceneManagerBindings, 0x48, 0x10, 0x0).DerefString(game, 73)) ?? old.ThisScene;
+					current.NextScene = PathToName(new DeepPointer(SceneManagerBindings, 0x28, 0x0, 0x10, 0x0).DerefString(game, 73)) ?? old.NextScene;
+					current.gameState = new DeepPointer(GameManager, 0x38, 0xF08, 0x0, 0x60, 0x0).Deref<int>(game);
+					current.loadingQuickSave = new DeepPointer(GameManager, 0x38, 0xF08, 0x0, 0x60, 0x45).Deref<bool>(game);
+				});
+				break;
+			}
+		}
+		
+		print("Exiting signature thread.");
 	});
+	vars.SigThread.Start();
 }
 
 update
@@ -104,6 +154,7 @@ split
 	}
 }
 
+
 reset
 {
 	return old.ThisScene == "Menu" &&
@@ -113,4 +164,14 @@ reset
 isLoading
 {
 	return current.ThisScene != current.NextScene || current.loadingQuickSave;
+}
+
+exit
+{
+	vars.TokenSource.Cancel();
+}
+
+shutdown
+{
+	vars.TokenSource.Cancel();
 }
