@@ -47,6 +47,7 @@ init
 		print("Starting signature thread.");
 		
 		var SceneManagerBindings = IntPtr.Zero;
+		var GameManager = IntPtr.Zero;
 		
 		//SceneManagerBindings::GetActiveScene
 		var SceneManagerBindingsSig = new SigScanTarget(5, "48 83 EC 28" +
@@ -62,20 +63,26 @@ init
 			"C3");
 		SceneManagerBindingsSig.OnFound = (p, s, ptr) => IntPtr.Add(ptr + 4, p.ReadValue<int>(ptr));
 		
+		//GameManager
+		var GameManagerSig = new SigScanTarget(3, "48 8B 05 ???????? 48 0F 45 C1");
+		GameManagerSig.OnFound = (p, s, ptr) => IntPtr.Add(ptr + 4, p.ReadValue<int>(ptr)) + 0x18;
+		
 		var Token = vars.TokenSource.Token;
 		while (!Token.IsCancellationRequested)
 		{
 			var GameModules = game.ModulesWow64Safe();
 			
+			var MonoModule = GameModules.FirstOrDefault(m => m.ModuleName == "mono-2.0-bdwgc.dll");
 			var UnityPlayerModule = GameModules.FirstOrDefault(m => m.ModuleName == "UnityPlayer.dll");
 			
-			if (UnityPlayerModule == null)
+			if (MonoModule == null || UnityPlayerModule == null)
 			{
 				Thread.Sleep(2000);
 				continue;
 			}
 			
 			var UnityPlayerScanner = new SignatureScanner(game, UnityPlayerModule.BaseAddress, UnityPlayerModule.ModuleMemorySize);
+			var MonoScanner = new SignatureScanner(game, MonoModule.BaseAddress, MonoModule.ModuleMemorySize);
 			
 			if (SceneManagerBindings == IntPtr.Zero && (SceneManagerBindings = UnityPlayerScanner.Scan(SceneManagerBindingsSig)) != IntPtr.Zero)
 			{
@@ -84,11 +91,17 @@ init
 				print("Found SceneManagerBinding: 0x" + SceneManagerBindings.ToString("X16"));
 			}
 			
-			vars.SigFound = SceneManagerBindings != IntPtr.Zero;
+
+			if (GameManager == IntPtr.Zero && (GameManager = MonoScanner.Scan(GameManagerSig)) != IntPtr.Zero)
+				print("Found GameManager: 0x" + GameManager.ToString("X16"));
+				
+			vars.SigFound = GameManager != IntPtr.Zero && SceneManagerBindings != IntPtr.Zero;
 
 			if (!vars.SigFound)
 			{
 				Thread.Sleep(2000);
+				if(GameManager == IntPtr.Zero)
+					print("Game Manager is null");
 				if(SceneManagerBindings == IntPtr.Zero)
 					print("Scene Manager is null");
 			}
@@ -106,8 +119,8 @@ init
 				{
 					current.ThisScene = PathToName(new DeepPointer(SceneManagerBindings, 0x48, 0x10, 0x0).DerefString(game, 73)) ?? old.ThisScene;
 					current.NextScene = PathToName(new DeepPointer(SceneManagerBindings, 0x28, 0x0, 0x10, 0x0).DerefString(game, 73)) ?? old.NextScene;
-					current.gameState = new DeepPointer("mono-2.0-bdwgc.dll", 0x00497E28, 0x50, 0xF30, 0x38, 0x90, 0xC4, 0x0).Deref<int>(game);
-					current.loadingQuickSave = new DeepPointer("mono-2.0-bdwgc.dll", 0x00497E28, 0x50, 0xF30, 0x38, 0x90, 0xC4, 0x41).Deref<bool>(game);
+					current.gameState = new DeepPointer(GameManager, 0x38, 0xF08, 0x0, 0x60, 0x0).Deref<int>(game);
+					current.loadingQuickSave = new DeepPointer(GameManager, 0x38, 0xF08, 0x0, 0x60, 0x45).Deref<bool>(game);
 				});
 				break;
 			}
