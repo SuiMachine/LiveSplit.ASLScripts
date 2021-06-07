@@ -106,8 +106,8 @@ init
 				{
 					current.ThisScene = PathToName(new DeepPointer(SceneManagerBindings, 0x48, 0x10, 0x0).DerefString(game, 73)) ?? old.ThisScene;
 					current.NextScene = PathToName(new DeepPointer(SceneManagerBindings, 0x28, 0x0, 0x10, 0x0).DerefString(game, 73)) ?? old.NextScene;
-					current.gameState = new DeepPointer("mono-2.0-bdwgc.dll", 0x004A2598, 0xF0, 0x1A0, 0x70, 0x10, 0xC4, 0x0).Deref<int>(game);
-					current.loadingQuickSave = new DeepPointer("mono-2.0-bdwgc.dll", 0x004A2598, 0xF0, 0x1A0, 0x70, 0x10, 0xC4, 0x41).Deref<bool>(game);
+					current.gameState = new DeepPointer("UnityPlayer.dll", 0x01A19BB0, 0x120, 0x0, 0x48, 0x60, 0x0, 0x60, 0x0).Deref<int>(game);
+					current.loadingQuickSave = new DeepPointer("UnityPlayer.dll", 0x01A19BB0, 0x120, 0x0, 0x48, 0x60, 0x0, 0x60, 0x41).Deref<bool>(game);
 				});
 				break;
 			}

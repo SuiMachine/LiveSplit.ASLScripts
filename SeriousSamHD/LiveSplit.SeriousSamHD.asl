@@ -1,92 +1,78 @@
 state("samhd")
-{	
+{
 }
 
 startup
-{
-	vars.FreeMemory = (Action<Process>)(p =>
-    {
-        p.FreeMemory((IntPtr)vars.injectedIsLoadingPtr);
-        p.FreeMemory((IntPtr)vars.contentOfInjectionCode);
-    });
-	
-	vars.CheckInitiation = (Func<Process, IntPtr, bool>)((p, ptr) =>
-    {
-        if (ptr == IntPtr.Zero)
-            return false;
-
-        byte[] bytes;
-        if (!p.ReadBytes(ptr, 3, out bytes))
-            return false;
-
-        var expectedBytes = new byte[] { 0xE8, 0x9C, 0xF7, 0x32, 0x00 };
-        if (!bytes.SequenceEqual(expectedBytes))
-            return false;
-
-        return true;
-    });
+{	
+	vars.TimerStart = (EventHandler) ((s, e) => vars.CompletedSplits.Clear());
+	timer.OnStart += vars.TimerStart;
 }
 
 init
 {
-	vars.originalStartLoadAddy = 0x007C5CFF;
-	vars.originalEndLoadAddy = 0x007C5D4A;
-
-	vars.injectedIsLoadingPtr = game.AllocateMemory(sizeof(int));
-	vars.isLoadingPtrBytes = BitConverter.GetBytes((uint)vars.injectedIsLoadingPtr);
+	vars.SigFound = false;
+	vars.TokenSource = new CancellationTokenSource();
+	vars.CompletedSplits = new List<string>();
+	current.Level = "";
+	current.isLoading = false;
+	vars.UpdateScenes = (Action) (() => {});
 	
-	/*
-    if (!vars.CheckInitiation(game, (IntPtr)0x0048E50F))
-        throw new Exception("Incorrect initiation!");*/
-
-	
-	// injected isLoadingDetour
-	var contentOfInjectionCode = new List<byte>()
+	vars.SigThread = new Thread(() =>
 	{
-		0xC7, 0x05																		//mov [injectedIsLoadingPtr],1
-	};
-	contentOfInjectionCode.AddRange(vars.isLoadingPtrBytes);
-	contentOfInjectionCode.AddRange(new byte[] { 1, 0, 0, 0 });	
-	contentOfInjectionCode.AddRange(new byte[] {0x68, 0xD8, 0x57, 0xD1, 0x00 });		//push Started loading world %1
-	contentOfInjectionCode.AddRange(new byte[] {0xE9, 0xFF, 0xFF, 0xFF, 0xFF });   		//jmp PLACEHOLDER
-	
-	//2nd injection
-    var secondSegmentPtr = contentOfInjectionCode.Count;
-	contentOfInjectionCode.AddRange(new byte[] { 0xC7, 0x05 });							//mov [injectedIsLoadingPtr],0
-	contentOfInjectionCode.AddRange(vars.isLoadingPtrBytes);
-	contentOfInjectionCode.AddRange(new byte[] { 0, 0, 0, 0 });	
-	contentOfInjectionCode.AddRange(new byte[] {0x68, 0xBC, 0x57, 0xD1, 0x00 });		//push Started loading world %1
-	contentOfInjectionCode.AddRange(new byte[] {0xE9, 0xFF, 0xFF, 0xFF, 0xFF });   		//jmp PLACEHOLDER
-	
-	vars.injectedStartLoadHookPtr = game.AllocateMemory(contentOfInjectionCode.Count);
-	game.Suspend();
-
-	try
-	{
-		//Write hook content into memory
-		vars.oInitPtr = game.WriteBytes((IntPtr)vars.injectedStartLoadHookPtr, contentOfInjectionCode.ToArray());
+		print("Starting signature thread.");
 		
-		//Replace placeholder jump and hook start load
-		game.WriteJumpInstruction((IntPtr)vars.injectedStartLoadHookPtr + secondSegmentPtr - 5, (IntPtr)vars.originalStartLoadAddy + 5);
-		game.WriteJumpInstruction((IntPtr)vars.originalStartLoadAddy, (IntPtr)vars.injectedStartLoadHookPtr);
+		var isLoadingBaseAddy = IntPtr.Zero;
 		
-		//Replace placeholder jump and hook end load
-		game.WriteJumpInstruction((IntPtr)vars.injectedStartLoadHookPtr + contentOfInjectionCode.Count - 5, (IntPtr)vars.originalEndLoadAddy + 5);	
-		game.WriteJumpInstruction((IntPtr)vars.originalEndLoadAddy, (IntPtr)vars.injectedStartLoadHookPtr + secondSegmentPtr);
+		//IsLoading base
+		var isLoadingBaseSig = new SigScanTarget(0, "8B 0D ?? ?? ?? ?? 03 C3 A3 ?? ?? ?? ?? 89 7C");
+		//SceneManagerBindingsSig.OnFound = (p, s, ptr) => IntPtr.Add(ptr + 4, p.ReadValue<int>(ptr));
 		
-	}
-	catch
-	{
-		vars.FreeMemory(game);
-		throw;
-	}
-	finally
-	{
-		game.Resume();
-	}	
+		var Token = vars.TokenSource.Token;
+		while (!Token.IsCancellationRequested)
+		{
+			var GameModules = game.ModulesWow64Safe();
+			
+			var isLoadingScanner = new SignatureScanner(game, game.MainModule.BaseAddress, game.MainModule.ModuleMemorySize);
+			
+			if (isLoadingBaseAddy == IntPtr.Zero && (isLoadingBaseAddy = isLoadingScanner.Scan(isLoadingBaseSig)) != IntPtr.Zero)
+			{
+				//print("Mov instruction of SceneManagerBindings: " + SceneManagerBindings.ToString("X8"));
+				print("Found SceneManagerBinding: 0x" + isLoadingBaseAddy.ToString("X16"));
+			}
+			
+			vars.SigFound = isLoadingBaseAddy != IntPtr.Zero;
+
+			if (!vars.SigFound)
+			{
+				Thread.Sleep(2000);
+				if(isLoadingBaseAddy == IntPtr.Zero)
+					print("isLoading is null");
+			}
+			else
+			{
+		
+				vars.UpdateScenes = (Action) (() =>
+				{
+					current.isLoading = new DeepPointer(isLoadingBaseAddy, 0x9FCE20, 0x0, 0x0).Deref<bool>(game);
+					//current.Level = new DeepPointer(SceneManagerBindings, 0x48, 0x10, 0x0).DerefString(game, 73) ?? old.ThisScene;
+				});
+				break;
+			}
+		}
+		
+		print("Exiting signature thread.");
+	});
+	vars.SigThread.Start();
 }
 
 update
+{
+	if (!vars.SigFound)
+		return false;
+	vars.UpdateScenes();
+}
+
+start
 {
 }
 
@@ -94,11 +80,22 @@ split
 {
 }
 
-start
+
+reset
 {
 }
 
 isLoading
 {
-	return game.ReadValue<bool>((IntPtr)vars.injectedIsLoadingPtr);
+	return current.ThisScene != current.NextScene || current.loadingQuickSave;
+}
+
+exit
+{
+	vars.TokenSource.Cancel();
+}
+
+shutdown
+{
+	vars.TokenSource.Cancel();
 }
