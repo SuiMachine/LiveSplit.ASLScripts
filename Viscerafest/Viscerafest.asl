@@ -164,7 +164,7 @@ init
 				Func<string, string> cleanString = (input) =>
 				{
 					if (input.Contains("BackingField")) input = System.Text.RegularExpressions.Regex.Matches(input, @"<(.+)>k__BackingField")[0].Groups[1].Value;
-					if (input.Contains("`")) input = input.Remove(input.IndexOf("`"));
+					if (input.Contains("`") && input.IndexOf("`") > 0) input = input.Remove(input.IndexOf("`"));
 					return input;
 				};
 
@@ -180,7 +180,7 @@ init
 						var offset = game.ReadValue<int>(mono_fields + OFFSETS_FIELD[2] + i);
 						if (string.IsNullOrEmpty(name) || type < 0x10 || type > 0x17 || fields.ContainsKey(name)) continue;
 
-						vars.Dbg("    Found field " + name + " (0x" + offset.ToString("X") + ")");
+						//vars.Dbg("    Found field " + name + " (0x" + offset.ToString("X") + ")");
 						fields.Add(name, new DeepPointer(klass + OFFSETS_KLASS[5], PTR_SIZE, OFFSETS_KLASS[3]).Deref<IntPtr>(game) + offset);
 					}
 
@@ -237,7 +237,7 @@ init
 				{
 					var gm = vars.Mono["GameManager"];
 					if(gm.ContainsKey("LoadingQuickSave"))
-						vars.LoadingQuickSave = gm["LoadingQuickSave"];
+						vars.pointerLoadingQuickSave = gm["LoadingQuickSave"];
 					else
 					{
 						vars.Dbg("No loading quick save... exiting.");
@@ -256,8 +256,8 @@ init
 					{
 						current.ThisScene = PathToName(new DeepPointer(SceneManagerBindings, 0x48, 0x10, 0x0).DerefString(game, 73)) ?? old.ThisScene;
 						current.NextScene = PathToName(new DeepPointer(SceneManagerBindings, 0x28, 0x0, 0x10, 0x0).DerefString(game, 73)) ?? old.NextScene;
-						current.loadingQuickSave = game.Read<byte>(vars.pointerLoadingQuickSave);
-						current.gameState = game.Read<byte>(vars.pointerGameManager);
+						current.loadingQuickSave = new DeepPointer(vars.pointerLoadingQuickSave).Deref<bool>(game);
+						current.gameState = new DeepPointer(vars.pointerGameState).Deref<int>(game);
 					});
 					break;
 				}
