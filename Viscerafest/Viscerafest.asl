@@ -1,4 +1,4 @@
-// This was inially based on Ero's, but was later expended by the fantastic Mono Bucket Scanner that Ero and Micrologist  wrote.
+// The code for figuring out addresses of static fields was provided by Ero.
 // I (Suicide Machine) only adopted it Viscerafest and reversed the pointer to SceneManagerBinding.
 
 state("viscerafest") {}
@@ -23,15 +23,18 @@ startup
 	settings.Add("sceneSplits", true, "Split after finishing a scene:");
 	foreach (string scene in SplitScenes)
 		settings.Add(scene, true, scene, "sceneSplits");
-
+		
+	if(!((IDictionary<String, object>)vars).ContainsKey("CompletedSplits"))
+		vars.CompletedSplits = new List<string>();
+		
 	vars.TimerStart = (EventHandler) ((s, e) => vars.CompletedSplits.Clear());
 	timer.OnStart += vars.TimerStart;
+	vars.TokenSource = new CancellationTokenSource();
 }
 
 init
 {
 	vars.SigFound = false;
-	vars.TokenSource = new CancellationTokenSource();
 	vars.CompletedSplits = new List<string>();
 	current.ThisScene = "";
 	current.NextScene = "";
@@ -93,137 +96,44 @@ init
 			}
 			else
 			{
-				print("Found scene manager, initiating mono scan to get the rest");
+				vars.Dbg("Starting mono scan.");
+				var classes = new Dictionary<string, bool>
+				{
+					{ "GameManager", false /* does this class derive from a Singleton<T> (or similar) */ }
+				};
 				
-				uint ASM_CS_HASH = 0xFA381AED;
-				int PTR_SIZE = 0x8;
-				// size, items, next
-				int[] OFFSETS_TABLE = { 0x18,  0x10, 0x10 };
-				// cache, size, items
-				int[] OFFSETS_CACHE = { 0x4C0, 0x18, 0x20 };
-				// parent, name, space, static, fields, runtime, next
-				int[] OFFSETS_KLASS = { 0x30, 0x48, 0x50, 0x60, 0x98, 0xD0, 0x108 };
-				// next, name, offset
-				int[] OFFSETS_FIELD = { 0x20,  0x8, 0x18 };
-
-				SignatureScanner MonoScanner = null;
-				var mono_image_loaded = new SigScanTarget(3, "48 8B 0D ???????? 48 8B D7 E8 ???????? 48 8B D8 83 3D ???????? 00");
-				mono_image_loaded.OnFound = (p, s, ptr) => ptr + 0x4 + p.ReadValue<int>(ptr);
-				IntPtr loaded_images = IntPtr.Zero, Asm_Cs_image = IntPtr.Zero;
+				IntPtr loaded_images = new DeepPointer("mono-2.0-bdwgc.dll", 0x49A0C8).Deref<IntPtr>(game);
+				int size = game.ReadValue<int>(loaded_images + 0x18);
+				IntPtr table = new DeepPointer(loaded_images + 0x10, 0x8 * (int)(0xFA381AED % size)).Deref<IntPtr>(game);
+				IntPtr asm_cs_image = IntPtr.Zero;
+				for (; table != IntPtr.Zero; table = game.ReadPointer(table + 0x10))
+				{
+					if (new DeepPointer(table, 0x0).DerefString(game, 32) != "Assembly-CSharp")
+						continue;
+					size = new DeepPointer(table + 0x8, 0x4D8).Deref<int>(game);
+					asm_cs_image = new DeepPointer(table + 0x8, 0x4E0).Deref<IntPtr>(game);
+				}
 				
-				vars.Mono = new Dictionary<string, Dictionary<string, IntPtr>>();
+				vars.Mono = new Dictionary<string, IntPtr>();
 
-				while (!Token.IsCancellationRequested)
+				for (int i = 0; i < size; ++i, table = game.ReadPointer(asm_cs_image + 0x8 * i))
 				{
-					var Mono = game.ModulesWow64Safe().FirstOrDefault(m => m.ModuleName.StartsWith("mono"));
-					if (Mono == null)
+					for (; table != IntPtr.Zero; table = game.ReadPointer(table + 0x108))
 					{
-						vars.Dbg("Could not find Mono module. Trying again.");
-						Thread.Sleep(2000);
-						continue;
+						string class_name = new DeepPointer(table + 0x48, 0x0).DerefString(game, 64, "");
+						
+						if (!classes.ContainsKey(class_name))
+							continue;
+						vars.Mono[class_name] = classes[class_name]
+												? new DeepPointer(table + 0x30, 0xD0, 0x8, 0x60).Deref<IntPtr>(game)
+												: new DeepPointer(table + 0xD0, 0x8, 0x60).Deref<IntPtr>(game);
 					}
-					MonoScanner = new SignatureScanner(game, Mono.BaseAddress, Mono.ModuleMemorySize);
-					break;
-				}
 
-				while (!Token.IsCancellationRequested)
-				{
-					loaded_images = MonoScanner.Scan(mono_image_loaded);
-					if (loaded_images == IntPtr.Zero)
-					{
-						vars.Dbg("Could not resolve mono_image_loaded signature. Trying again.");
-						Thread.Sleep(2000);
-						continue;
-					}
-					break;
-				}
-
-				while (!Token.IsCancellationRequested)
-				{
-					var ghashtable = IntPtr.Zero;
-					var size = new DeepPointer(loaded_images, OFFSETS_TABLE[0]).Deref<int>(game);
-					new DeepPointer(loaded_images, OFFSETS_TABLE[1], PTR_SIZE * (int)(ASM_CS_HASH % size)).DerefOffsets(game, out ghashtable);
-
-					for (var ptr = game.ReadPointer(ghashtable); ptr != IntPtr.Zero; ptr = game.ReadPointer(ptr + OFFSETS_TABLE[2]))
-					{
-						string name = new DeepPointer(ptr, 0x0).DerefString(game, 32, "");
-						if (name != "Assembly-CSharp") continue;
-						Asm_Cs_image = game.ReadPointer(ptr + PTR_SIZE);
+					if (vars.Mono.Count == classes.Count)
 						break;
-					}
-					
-					if (Asm_Cs_image == IntPtr.Zero)
-					{
-						vars.Dbg("Assembly-CSharp was not found in the loaded images. Trying again.");
-						Thread.Sleep(2000);
-						continue;
-					}
-					break;
 				}
 
-				Func<string, string> cleanString = (input) =>
-				{
-					if (input.Contains("BackingField")) input = System.Text.RegularExpressions.Regex.Matches(input, @"<(.+)>k__BackingField")[0].Groups[1].Value;
-					if (input.Contains("`") && input.IndexOf("`") > 0) input = input.Remove(input.IndexOf("`"));
-					return input;
-				};
-
-				Func<IntPtr, Dictionary<string, IntPtr>> findStatics = (klass) =>
-				{
-					var fields = new Dictionary<string, IntPtr>();
-					IntPtr mono_fields = game.ReadPointer(klass + OFFSETS_KLASS[4]), ptr = game.ReadPointer(mono_fields + OFFSETS_FIELD[1]);
-
-					for (int i = 0; ptr != IntPtr.Zero; i += OFFSETS_FIELD[0], ptr = game.ReadPointer(mono_fields + OFFSETS_FIELD[1] + i))
-					{
-						var type = new DeepPointer(mono_fields + i, PTR_SIZE).Deref<short>(game);
-						var name = cleanString(new DeepPointer(mono_fields + OFFSETS_FIELD[1] + i, 0x0).DerefString(game, 64, ""));
-						var offset = game.ReadValue<int>(mono_fields + OFFSETS_FIELD[2] + i);
-						if (string.IsNullOrEmpty(name) || type < 0x10 || type > 0x17 || fields.ContainsKey(name)) continue;
-
-						//vars.Dbg("    Found field " + name + " (0x" + offset.ToString("X") + ")");
-						fields.Add(name, new DeepPointer(klass + OFFSETS_KLASS[5], PTR_SIZE, OFFSETS_KLASS[3]).Deref<IntPtr>(game) + offset);
-					}
-
-					return fields;
-				};
-
-				while (!Token.IsCancellationRequested)
-				{
-					var size = game.ReadValue<int>(Asm_Cs_image + OFFSETS_CACHE[0] + OFFSETS_CACHE[1]);
-					var monovtable = game.ReadPointer(Asm_Cs_image + OFFSETS_CACHE[0] + OFFSETS_CACHE[2]);
-
-					if (size == 0)
-					{
-						vars.Dbg("Class cache is empty. Wrong offsets? Trying again.");
-						vars.Dbg(size);
-						Thread.Sleep(2000);
-						continue;
-					}
-
-					for (int i = 0; i < size; ++i)
-					{
-						for (var klass = game.ReadPointer(monovtable + PTR_SIZE * i); klass != IntPtr.Zero; klass = game.ReadPointer(klass + OFFSETS_KLASS[6]))
-						{
-							string class_namespace = new DeepPointer(klass + OFFSETS_KLASS[2], 0x0).DerefString(game, 128, "default");
-							if (class_namespace.Length > 0) continue;
-
-							string class_name = new DeepPointer(klass + OFFSETS_KLASS[1], 0x0).DerefString(game, 128, "");
-							if (vars.Mono.ContainsKey(class_name) || string.IsNullOrEmpty(class_name)) continue;
-
-							//vars.Dbg("Found class " + class_name + " (0x" + klass.ToString("X") + ")");
-							
-							var static_fields = findStatics(klass);
-							if (static_fields.Count <= 0) continue;
-
-							//vars.Dbg(string.Format("Added class '{0}' with fields\n{1}", class_name, string.Join(",\n", static_fields.Keys)));
-							vars.Mono.Add(class_name, static_fields);
-						}
-					}
-
-					break;
-				}
-
-				vars.Dbg("Exiting mono scan thread.");
+				vars.Dbg("Exiting mono scan.");
 		
 				Func<string, string> PathToName = (path) =>
 				{
@@ -233,23 +143,17 @@ init
 						return System.Text.RegularExpressions.Regex.Matches(path, @".+/(.+).unity")[0].Groups[1].Value;
 				};
 				
+				foreach(var element in vars.Mono)
+				{
+					vars.Dbg(element);
+				}				
+				
 				if(vars.Mono.ContainsKey("GameManager"))
 				{
 					var gm = vars.Mono["GameManager"];
-					if(gm.ContainsKey("LoadingQuickSave"))
-						vars.pointerLoadingQuickSave = gm["LoadingQuickSave"];
-					else
 					{
-						vars.Dbg("No loading quick save... exiting.");
-						break;
-					}
-					
-					if(gm.ContainsKey("GAME_STATE"))
-						vars.pointerGameState = gm["GAME_STATE"];
-					else
-					{
-						vars.Dbg("No game state... exiting.");
-						break;
+						vars.pointerGameState = gm + 0x0; //gameState 
+						vars.pointerLoadingQuickSave = gm + 0x41; //QuickSaveLoading
 					}
 
 					vars.UpdateScenes = (Action) (() =>
@@ -259,6 +163,7 @@ init
 						current.loadingQuickSave = new DeepPointer(vars.pointerLoadingQuickSave).Deref<bool>(game);
 						current.gameState = new DeepPointer(vars.pointerGameState).Deref<int>(game);
 					});
+					vars.Dbg("Pointers set!");
 					break;
 				}
 				else
@@ -317,4 +222,5 @@ exit
 shutdown
 {
 	vars.TokenSource.Cancel();
+	timer.OnStart -= vars.TimerStart;
 }
