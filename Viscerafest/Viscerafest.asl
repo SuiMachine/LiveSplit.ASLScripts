@@ -153,7 +153,7 @@ init
 					var gm = vars.Mono["GameManager"];
 					{
 						vars.pointerGameState = gm + 0x0; //gameState 
-						vars.pointerLoadingQuickSave = gm + 0x41; //QuickSaveLoading
+						vars.pointerLoadingQuickSave = gm + 0x51; //QuickSaveLoading
 					}
 
 					vars.UpdateScenes = (Action) (() =>
