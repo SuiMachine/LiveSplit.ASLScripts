@@ -1,101 +1,56 @@
-state("samhd")
-{
-}
+state("SamHD") {}
 
 startup
-{	
-	vars.TimerStart = (EventHandler) ((s, e) => vars.CompletedSplits.Clear());
-	timer.OnStart += vars.TimerStart;
+{
+	settings.Add("0_01_Hatshepsut", false, "Split after finishing Hatshepsut");
 }
 
 init
 {
-	vars.SigFound = false;
-	vars.TokenSource = new CancellationTokenSource();
-	vars.CompletedSplits = new List<string>();
-	current.Level = "";
-	current.isLoading = false;
-	vars.UpdateScenes = (Action) (() => {});
-	
-	vars.SigThread = new Thread(() =>
-	{
-		print("Starting signature thread.");
-		
-		var isLoadingBaseAddy = IntPtr.Zero;
-		
-		//IsLoading base
-		var isLoadingBaseSig = new SigScanTarget(0, "8B 0D ?? ?? ?? ?? 03 C3 A3 ?? ?? ?? ?? 89 7C");
-		//SceneManagerBindingsSig.OnFound = (p, s, ptr) => IntPtr.Add(ptr + 4, p.ReadValue<int>(ptr));
-		
-		var Token = vars.TokenSource.Token;
-		while (!Token.IsCancellationRequested)
-		{
-			var GameModules = game.ModulesWow64Safe();
-			
-			var isLoadingScanner = new SignatureScanner(game, game.MainModule.BaseAddress, game.MainModule.ModuleMemorySize);
-			
-			if (isLoadingBaseAddy == IntPtr.Zero && (isLoadingBaseAddy = isLoadingScanner.Scan(isLoadingBaseSig)) != IntPtr.Zero)
-			{
-				//print("Mov instruction of SceneManagerBindings: " + SceneManagerBindings.ToString("X8"));
-				print("Found SceneManagerBinding: 0x" + isLoadingBaseAddy.ToString("X16"));
-			}
-			
-			vars.SigFound = isLoadingBaseAddy != IntPtr.Zero;
+	var P_Module = game.MainModule;
+	var P_Scanner = new SignatureScanner(game, P_Module.BaseAddress, P_Module.ModuleMemorySize);
 
-			if (!vars.SigFound)
-			{
-				Thread.Sleep(2000);
-				if(isLoadingBaseAddy == IntPtr.Zero)
-					print("isLoading is null");
-			}
-			else
-			{
-		
-				vars.UpdateScenes = (Action) (() =>
-				{
-					current.isLoading = new DeepPointer(isLoadingBaseAddy, 0x9FCE20, 0x0, 0x0).Deref<bool>(game);
-					//current.Level = new DeepPointer(SceneManagerBindings, 0x48, 0x10, 0x0).DerefString(game, 73) ?? old.ThisScene;
-				});
-				break;
-			}
-		}
-		
-		print("Exiting signature thread.");
-	});
-	vars.SigThread.Start();
+	IntPtr LoadField = IntPtr.Zero, LevelField = IntPtr.Zero;
+	var LoadTrg = new SigScanTarget(2, "8B 35 ?? ?? ?? ?? 8D 64 24 00");
+	var LevelTrg = new SigScanTarget(1, "A3 ?? ?? ?? ?? FF D2");
+
+	foreach (var trg in new[] { LoadTrg, LevelTrg })
+		trg.OnFound = (p, s, ptr) => p.ReadPointer(ptr);
+
+	int scanAttempts = 0;
+	while (scanAttempts++ < 20)
+	{
+		LoadField = P_Scanner.Scan(LoadTrg);
+		LevelField = P_Scanner.Scan(LevelTrg);
+
+		if (vars.SigsFound = new[] { LoadField, LevelField }.All(a => a != IntPtr.Zero)) break;
+	}
+
+	if (!vars.SigsFound) return;
+
+	vars.Loading = new MemoryWatcher<bool>(new DeepPointer(LoadField, 0x0, 0x0));
+	vars.Level = new StringWatcher(new DeepPointer(LevelField, 0x20, 0x1C, 0x0), 32);
 }
 
 update
 {
-	if (!vars.SigFound)
-		return false;
-	vars.UpdateScenes();
+	if (!vars.SigsFound) return false;
+
+	vars.Loading.Update(game);
+	vars.Level.Update(game);
 }
 
 start
 {
+	return vars.Loading.Old && !vars.Loading.Current && vars.Level.Current == "0_01_Hatshepsut";
 }
 
 split
 {
-}
-
-
-reset
-{
+	return vars.Level.Old != vars.Level.Current && settings[vars.Level.Old];
 }
 
 isLoading
 {
-	return current.ThisScene != current.NextScene || current.loadingQuickSave;
-}
-
-exit
-{
-	vars.TokenSource.Cancel();
-}
-
-shutdown
-{
-	vars.TokenSource.Cancel();
+	return vars.Loading.Current;
 }
