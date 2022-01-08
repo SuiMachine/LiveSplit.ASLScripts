@@ -42,10 +42,8 @@ init
 	vars.CompletedSplits = new List<string>();
 	current.ThisScene = "";
 	current.NextScene = "";
-	current.gameState = 0;
-	current.loadingQuickSave = false;
-	vars.pointerGameState = IntPtr.Zero;
-	vars.pointerLoadingQuickSave = IntPtr.Zero;
+	current.MissionSuccess = false;
+	vars.gameScriptPtr = IntPtr.Zero;
 	vars.UpdateScenes = (Action) (() => {});
 	
 	vars.SigThread = new Thread(() =>
@@ -101,6 +99,44 @@ init
 			}
 			else
 			{
+				vars.Dbg("Starting mono scan.");
+				var classes = new Dictionary<string, bool>
+				{
+					{ "GameScript", false /* does this class derive from a Singleton<T> (or similar) */ }
+				};
+				
+				IntPtr loaded_images = new DeepPointer("mono-2.0-bdwgc.dll", 0x4980C0).Deref<IntPtr>(game);
+				int size = game.ReadValue<int>(loaded_images + 0x18);
+				IntPtr table = new DeepPointer(loaded_images + 0x10, 0x8 * (int)(0xFA381AED % size)).Deref<IntPtr>(game);
+				IntPtr asm_cs_image = IntPtr.Zero;
+				for (; table != IntPtr.Zero; table = game.ReadPointer(table + 0x10))
+				{
+					if (new DeepPointer(table, 0x0).DerefString(game, 32) != "Assembly-CSharp")
+						continue;
+					size = new DeepPointer(table + 0x8, 0x4D8).Deref<int>(game);
+					asm_cs_image = new DeepPointer(table + 0x8, 0x4E0).Deref<IntPtr>(game);
+				}
+				
+				vars.Mono = new Dictionary<string, IntPtr>();
+
+				for (int i = 0; i < size; ++i, table = game.ReadPointer(asm_cs_image + 0x8 * i))
+				{
+					for (; table != IntPtr.Zero; table = game.ReadPointer(table + 0x108))
+					{
+						string class_name = new DeepPointer(table + 0x48, 0x0).DerefString(game, 64, "");
+						
+						if (!classes.ContainsKey(class_name))
+							continue;
+						vars.Mono[class_name] = classes[class_name]
+												? new DeepPointer(table + 0x30, 0xD0, 0x8, 0x60).Deref<IntPtr>(game)
+												: new DeepPointer(table + 0xD0, 0x8, 0x60).Deref<IntPtr>(game);
+					}
+
+					if (vars.Mono.Count == classes.Count)
+						break;
+				}
+
+				vars.Dbg("Exiting mono scan.");
 		
 				Func<string, string> PathToName = (path) =>
 				{
@@ -110,13 +146,29 @@ init
 						return System.Text.RegularExpressions.Regex.Matches(path, @".+/(.+).unity")[0].Groups[1].Value;
 				};
 				
-				vars.UpdateScenes = (Action) (() =>
+				foreach(var element in vars.Mono)
 				{
-					current.ThisScene = PathToName(new DeepPointer(SceneManagerBindings, 0x48, 0x10, 0x0).DerefString(game, 73)) ?? old.ThisScene;
-					current.NextScene = PathToName(new DeepPointer(SceneManagerBindings, 0x28, 0x0, 0x10, 0x0).DerefString(game, 73)) ?? old.NextScene;
-				});
-				vars.Dbg("Pointers set!");
-				break;
+					vars.Dbg(element);
+				}				
+				
+				if(vars.Mono.ContainsKey("GameScript"))
+				{
+					IntPtr gameManager = vars.Mono["GameScript"];
+
+					vars.UpdateScenes = (Action) (() =>
+					{
+						current.ThisScene = PathToName(new DeepPointer(SceneManagerBindings, 0x48, 0x10, 0x0).DerefString(game, 73)) ?? old.ThisScene;
+						current.NextScene = PathToName(new DeepPointer(SceneManagerBindings, 0x28, 0x0, 0x10, 0x0).DerefString(game, 73)) ?? old.NextScene;
+						current.MissionSuccess = new DeepPointer(gameManager, 0x80).Deref<bool>(game);	
+					});
+					vars.Dbg("Pointers set!");
+					break;
+				}
+				else
+				{
+					vars.Dbg("No Game manager. Exiting... :(");
+					break;
+				}
 			}
 		}
 		
@@ -139,23 +191,13 @@ start
 
 split
 {
-	if(old.NextScene != current.NextScene)
+	if(current.MissionSuccess && current.MissionSuccess != old.MissionSuccess && current.NextScene != "MainMenu" && !vars.CompletedSplits.Contains(current.NextScene))
 	{
-		vars.Dbg("Kurrr: " + old.NextScene + " -> " + current.NextScene);
+		vars.Dbg("Finished: " + current.NextScene);
+		vars.CompletedSplits.Add(current.NextScene);
+		return settings[current.NextScene];
 	}
-	
-	if(old.NextScene == null || old.NextScene == "")
-		return false;
-	
-	if ((old.NextScene != current.NextScene) && 
-		current.NextScene != "MainMenu" && old.NextScene != "MainMenu" &&
-		!vars.CompletedSplits.Contains(old.NextScene))
-	{
-		
-		vars.Dbg("Level:" + current.ThisScene);
-		vars.CompletedSplits.Add(old.NextScene);
-		return settings[old.NextScene];
-	}
+	return false;
 }
 
 
