@@ -50,6 +50,7 @@ init
 	
 	vars.SigThread = new Thread(() =>
 	{
+	//MOno + 0x4980C0
 		print("Starting signature thread.");
 		
 		var SceneManagerBindings = IntPtr.Zero;
