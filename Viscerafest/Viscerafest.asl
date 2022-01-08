@@ -102,7 +102,7 @@ init
 					{ "GameManager", false /* does this class derive from a Singleton<T> (or similar) */ }
 				};
 				
-				IntPtr loaded_images = new DeepPointer("mono-2.0-bdwgc.dll", 0x49A0C8).Deref<IntPtr>(game);
+				IntPtr loaded_images = new DeepPointer("mono-2.0-bdwgc.dll", 0x49B0C8).Deref<IntPtr>(game);
 				int size = game.ReadValue<int>(loaded_images + 0x18);
 				IntPtr table = new DeepPointer(loaded_images + 0x10, 0x8 * (int)(0xFA381AED % size)).Deref<IntPtr>(game);
 				IntPtr asm_cs_image = IntPtr.Zero;
