@@ -12,7 +12,9 @@ init
 {
 	vars.SigFound = false;
 	vars.UpdateScenes = (Action) (() => {});
-	current.GameScriptIsPaused = false;
+	//current.GameScriptIsPaused = false;
+	current.UIHandlerMenuOpened = false;
+	current.UIHandlerSubMenuOpened = false;
 	
 	vars.SigThread = new Thread(() =>
 	{
@@ -43,7 +45,7 @@ init
 			vars.Dbg("Starting mono scan.");
 			var classes = new Dictionary<string, bool>
 			{
-				{ "GameScript", false /* does this class derive from a Singleton<T> (or similar) */ },
+				//{ "GameScript", false /* does this class derive from a Singleton<T> (or similar) */ },
 				{ "UIHandler", false /* does this class derive from a Singleton<T> (or similar) */ }
 			};
 			
@@ -75,7 +77,6 @@ init
 					vars.Mono[class_name] = classes[class_name]
 											? new DeepPointer(table + 0x30, 0xD0, 0x8, 0x60).Deref<IntPtr>(game)
 											: new DeepPointer(table + 0xD0, 0x8, 0x60).Deref<IntPtr>(game);
-					vars.Dbg("Adding:" + class_name);
 				}
 			
 				if (vars.Mono.Count == classes.Count)
@@ -90,18 +91,34 @@ init
 				vars.Dbg(element);
 			}				
 			
-			if(vars.Mono.ContainsKey("GameScript") && vars.Mono.ContainsKey("UIHandler"))
+			if(vars.Mono.ContainsKey("UIHandler"))
 			{
-				IntPtr gameManager = vars.Mono["GameScript"];
-				IntPtr levelHandler = vars.Mono["UIHandler"];
+				//IntPtr gameManager = vars.Mono["GameScript"];
+				IntPtr uiHandler = vars.Mono["UIHandler"];
 			
-				//GameScript.Instance.IsPaused (+78)
-				//UIHandler.Instance.CurrentWindow(+58).SubWindow(+18)
 				vars.UpdateScenes = (Action) (() =>
 				{
-					current.GameScriptIsPaused = new DeepPointer(gameManager, 0x78).Deref<bool>(game);
+					//current.GameScriptIsPaused = new DeepPointer(gameManager, 0x78).Deref<bool>(game); //GameScript.Instance.IsPaused (+78)
+					
+					var UIHandlerInstance = new DeepPointer(uiHandler + 0x20).Deref<IntPtr>(game);
+					var currentWindow = new DeepPointer(UIHandlerInstance + 0x58).Deref<IntPtr>(game);
+
+					if(currentWindow == IntPtr.Zero)
+					{
+						current.UIHandlerMenuOpened = false;
+						current.UIHandlerSubMenuOpened = false;
+					}
+					else
+					{
+						current.UIHandlerMenuOpened = true;
+						var subWindow = new DeepPointer(currentWindow + 0x18).Deref<IntPtr>(game);
+						current.UIHandlerSubMenuOpened = subWindow != IntPtr.Zero;
+					}
+					
+
 				});
 				vars.Dbg("Pointers set!");
+				vars.SigFound = true;
 				break;
 			}
 			else
@@ -109,7 +126,6 @@ init
 				vars.Dbg("No Game manager. Exiting... :(");
 				break;
 			}
-			
 		}
 		
 		print("Exiting signature thread.");
@@ -126,7 +142,7 @@ update
 
 isLoading
 {
-	return current.GameScriptIsPaused;
+	return current.UIHandlerSubMenuOpened;
 }
 
 exit
