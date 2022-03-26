@@ -14,7 +14,14 @@ startup
 		"C1L4",
 		"C1L5",
 		"C1L6",
-		"C1L7"
+		"C1L7",
+		"C2L1",
+		"C2L2",
+		"C2L3",
+		"C2L4",
+		"C2L5",
+		"C2L6",
+		"C2L7"
 	};
 	
 	vars.AdditionalPauses = new List<string> { "Menu" };
@@ -24,6 +31,10 @@ startup
 	foreach (string scene in SplitScenes)
 		settings.Add(scene, true, scene, "sceneSplits");
 		
+	settings.Add("endChapterSplits", true, "End chapter splits:");
+	settings.Add("C1L7End", false, "C1L7 (Chapter 1 End)", "endChapterSplits");
+	settings.Add("C2L7End", true, "C2L7 (Chapter 2 End)", "endChapterSplits");
+	
 	if(!((IDictionary<String, object>)vars).ContainsKey("CompletedSplits"))
 		vars.CompletedSplits = new List<string>();
 		
@@ -36,6 +47,7 @@ init
 {
 	vars.SigFound = false;
 	vars.CompletedSplits = new List<string>();
+	vars.TokenSource = new CancellationTokenSource();
 	current.ThisScene = "";
 	current.NextScene = "";
 	current.gameState = 0;
@@ -47,7 +59,7 @@ init
 	vars.SigThread = new Thread(() =>
 	{
 		print("Starting signature thread.");
-		
+
 		var SceneManagerBindings = IntPtr.Zero;
 		
 		//SceneManagerBindings::GetActiveScene
@@ -67,6 +79,12 @@ init
 		var Token = vars.TokenSource.Token;
 		while (!Token.IsCancellationRequested)
 		{
+			if(game.StartTime + TimeSpan.FromSeconds(5) > DateTime.Now)
+			{
+				Thread.Sleep(1000);
+				continue;
+			}
+			
 			var GameModules = game.ModulesWow64Safe();
 			
 			var UnityPlayerModule = GameModules.FirstOrDefault(m => m.ModuleName == "UnityPlayer.dll");
@@ -164,6 +182,8 @@ init
 						current.gameState = new DeepPointer(vars.pointerGameState).Deref<int>(game);
 					});
 					vars.Dbg("Pointers set!");
+					vars.UpdateScenes();
+					vars.Dbg("Current level: " + current.ThisScene);
 					break;
 				}
 				else
@@ -193,7 +213,10 @@ start
 
 split
 {
-	if ((old.NextScene != current.NextScene || (old.gameState != current.gameState && current.gameState == 4 && current.NextScene == "C1L7")) && 
+	if ((old.NextScene != current.NextScene ||
+		(old.gameState != current.gameState && current.gameState == 4 
+			&& ((current.NextScene == "C1L7" && settings["C1L7End"]) || (current.NextScene == "C2L7" && settings["C2L7End"]))
+			)) && 
 		current.NextScene != "Menu" && old.NextScene != "Menu" &&
 		!vars.CompletedSplits.Contains(old.NextScene))
 	{
@@ -201,7 +224,6 @@ split
 		return settings[old.NextScene];
 	}
 }
-
 
 reset
 {
@@ -223,4 +245,6 @@ shutdown
 {
 	vars.TokenSource.Cancel();
 	timer.OnStart -= vars.TimerStart;
+	vars.SigFound = false;
+	vars.UpdateScenes = (Action) (() => {});
 }
