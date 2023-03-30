@@ -302,6 +302,7 @@ init
 					
 					//There is probably going to be a switch here later on when game updates
 					var pointerGameState = new DeepPointer("GameAssembly.dll", 0x10E8750, 0xB8, 0x0);
+					var pointerLoadingSave = new DeepPointer("GameAssembly.dll", 0x10E8750, 0xB8, 0x51);
 					
 					Func<string, string> PathToName = (path) =>
 					{
@@ -315,7 +316,7 @@ init
 					{
 						current.ThisScene = PathToName(new DeepPointer(SceneManagerBindings, 0x48, 0x10, 0x0).DerefString(game, 73)) ?? old.ThisScene;
 						current.NextScene = PathToName(new DeepPointer(SceneManagerBindings, 0x28, 0x0, 0x10, 0x0).DerefString(game, 73)) ?? old.NextScene;
-						current.loadingQuickSave = new DeepPointer(vars.pointerLoadingQuickSave).Deref<bool>(game);
+						current.loadingQuickSave = pointerLoadingSave.Deref<bool>(game);
 						current.gameState = pointerGameState.Deref<int>(game);
 					});
 					vars.Dbg("Pointers set!");
