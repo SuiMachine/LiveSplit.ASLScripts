@@ -57,7 +57,8 @@ init
 	vars.pointerGameState = IntPtr.Zero;
 	vars.pointerLoadingQuickSave = IntPtr.Zero;
 	vars.UpdateScenes = (Action) (() => {});
-	var isIl2Cpp = File.Exists(Path.Combine(Directory.GetParent(game.MainModuleWow64Safe().FileName).FullName, "GameAssembly.dll"));
+	var gameAssemblyPath = Path.Combine(Directory.GetParent(game.MainModuleWow64Safe().FileName).FullName, "GameAssembly.dll");
+	var isIl2Cpp = File.Exists(gameAssemblyPath);
 	
 	vars.Dbg(isIl2Cpp ? "Viscerafest version uses il2cpp!" : "Viscerafest version is older and uses mono!");
 	
@@ -288,7 +289,7 @@ init
 				{
 						//print("Mov instruction of SceneManagerBindings: " + SceneManagerBindings.ToString("X8"));
 					SceneManagerBindings = IntPtr.Add(SceneManagerBindings + 7, game.ReadValue<int>(SceneManagerBindings + 3));
-					print("Found SceneManagerBinding: 0x" + SceneManagerBindings.ToString("X16"));
+					vars.Dbg("Found SceneManagerBinding: 0x" + SceneManagerBindings.ToString("X16"));
 				}
 				
 				vars.SigFound = SceneManagerBindings != IntPtr.Zero;
@@ -296,6 +297,12 @@ init
 				
 				if(vars.SigFound)
 				{
+					var size = GameModules.FirstOrDefault(m => m.ModuleName == "GameAssembly.dll").ModuleMemorySize;
+					vars.Dbg("Game assembly module size is: " + size.ToString());
+					
+					//There is probably going to be a switch here later on when game updates
+					var pointerGameState = new DeepPointer("GameAssembly.dll", 0x10E8750, 0xB8, 0x0);
+					
 					Func<string, string> PathToName = (path) =>
 					{
 						if (String.IsNullOrEmpty(path) || !path.StartsWith("Assets/"))
@@ -309,7 +316,7 @@ init
 						current.ThisScene = PathToName(new DeepPointer(SceneManagerBindings, 0x48, 0x10, 0x0).DerefString(game, 73)) ?? old.ThisScene;
 						current.NextScene = PathToName(new DeepPointer(SceneManagerBindings, 0x28, 0x0, 0x10, 0x0).DerefString(game, 73)) ?? old.NextScene;
 						current.loadingQuickSave = new DeepPointer(vars.pointerLoadingQuickSave).Deref<bool>(game);
-						current.gameState = new DeepPointer(vars.pointerGameState).Deref<int>(game);
+						current.gameState = pointerGameState.Deref<int>(game);
 					});
 					vars.Dbg("Pointers set!");
 					
