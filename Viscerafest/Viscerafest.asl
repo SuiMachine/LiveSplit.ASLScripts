@@ -1,7 +1,9 @@
 // The code for figuring out addresses of static fields was provided by Ero.
 // I (Suicide Machine) only adopted it Viscerafest and reversed the pointer to SceneManagerBinding.
 
-state("viscerafest") {}
+state("viscerafest")
+{
+}
 
 startup
 {
@@ -55,125 +57,253 @@ init
 	vars.pointerGameState = IntPtr.Zero;
 	vars.pointerLoadingQuickSave = IntPtr.Zero;
 	vars.UpdateScenes = (Action) (() => {});
+	var isIl2Cpp = File.Exists(Path.Combine(Directory.GetParent(game.MainModuleWow64Safe().FileName).FullName, "GameAssembly.dll"));
 	
-	vars.SigThread = new Thread(() =>
+	vars.Dbg(isIl2Cpp ? "Viscerafest version uses il2cpp!" : "Viscerafest version is older and uses mono!");
+	
+	if(!isIl2Cpp)
 	{
-		print("Starting signature thread.");
-
-		var SceneManagerBindings = IntPtr.Zero;
-		
-		//SceneManagerBindings::GetActiveScene
-		var SceneManagerBindingsSig = new SigScanTarget(5, "48 83 EC 28" +
-			"E8 ?? ?? ?? ??" +
-			"48 8B C8" +
-			"E8 ?? ?? ?? ??" +
-			"48 85 C0" +
-			"74 08" +
-			"8B 40 08" +
-			"48 83 C4 28" +
-			"C3" +
-			"48 83 C4 28" +
-			"C3");
-		SceneManagerBindingsSig.OnFound = (p, s, ptr) => IntPtr.Add(ptr + 4, p.ReadValue<int>(ptr));
-		
-		var Token = vars.TokenSource.Token;
-		while (!Token.IsCancellationRequested)
+		vars.SigThread = new Thread(() =>
 		{
-			if(game.StartTime + TimeSpan.FromSeconds(5) > DateTime.Now)
+			print("Starting signature thread.");
+			
+			var SceneManagerBindings = IntPtr.Zero;
+			
+			//SceneManagerBindings::GetActiveScene
+			var SceneManagerBindingsSig = new SigScanTarget(5, "48 83 EC 28" +
+				"E8 ?? ?? ?? ??" +
+				"48 8B C8" +
+				"E8 ?? ?? ?? ??" +
+				"48 85 C0" +
+				"74 08" +
+				"8B 40 08" +
+				"48 83 C4 28" +
+				"C3" +
+				"48 83 C4 28" +
+				"C3");
+			SceneManagerBindingsSig.OnFound = (p, s, ptr) => IntPtr.Add(ptr + 4, p.ReadValue<int>(ptr));
+			
+			
+			var Token = vars.TokenSource.Token;
+			while (!Token.IsCancellationRequested)
 			{
-				Thread.Sleep(1000);
-				continue;
-			}
-			
-			var GameModules = game.ModulesWow64Safe();
-			
-			var UnityPlayerModule = GameModules.FirstOrDefault(m => m.ModuleName == "UnityPlayer.dll");
-			
-			if (UnityPlayerModule == null)
-			{
-				Thread.Sleep(2000);
-				continue;
-			}
-			
-			var UnityPlayerScanner = new SignatureScanner(game, UnityPlayerModule.BaseAddress, UnityPlayerModule.ModuleMemorySize);
-			
-			if (SceneManagerBindings == IntPtr.Zero && (SceneManagerBindings = UnityPlayerScanner.Scan(SceneManagerBindingsSig)) != IntPtr.Zero)
-			{
-				//print("Mov instruction of SceneManagerBindings: " + SceneManagerBindings.ToString("X8"));
-				SceneManagerBindings = IntPtr.Add(SceneManagerBindings + 7, game.ReadValue<int>(SceneManagerBindings + 3));
-				print("Found SceneManagerBinding: 0x" + SceneManagerBindings.ToString("X16"));
-			}
-			
-			vars.SigFound = SceneManagerBindings != IntPtr.Zero;
-
-			if (!vars.SigFound)
-			{
-				Thread.Sleep(2000);
-				if(SceneManagerBindings == IntPtr.Zero)
-					print("Scene Manager is null");
-			}
-			else
-			{
-				vars.Dbg("Starting mono scan.");
-				var classes = new Dictionary<string, bool>
-				{
-					{ "GameManager", false /* does this class derive from a Singleton<T> (or similar) */ }
-				};
+				var GameModules = game.ModulesWow64Safe();
 				
-				IntPtr loaded_images = new DeepPointer("mono-2.0-bdwgc.dll", 0x49B0C8).Deref<IntPtr>(game);
-				int size = game.ReadValue<int>(loaded_images + 0x18);
-				IntPtr table = new DeepPointer(loaded_images + 0x10, 0x8 * (int)(0xFA381AED % size)).Deref<IntPtr>(game);
-				IntPtr asm_cs_image = IntPtr.Zero;
-				for (; table != IntPtr.Zero; table = game.ReadPointer(table + 0x10))
+				var UnityPlayerModule = GameModules.FirstOrDefault(m => m.ModuleName == "UnityPlayer.dll");
+				
+				if (UnityPlayerModule == null)
 				{
-					if (new DeepPointer(table, 0x0).DerefString(game, 32) != "Assembly-CSharp")
-						continue;
-					size = new DeepPointer(table + 0x8, 0x4D8).Deref<int>(game);
-					asm_cs_image = new DeepPointer(table + 0x8, 0x4E0).Deref<IntPtr>(game);
+					Thread.Sleep(2000);
+					continue;
 				}
 				
-				vars.Mono = new Dictionary<string, IntPtr>();
-
-				for (int i = 0; i < size; ++i, table = game.ReadPointer(asm_cs_image + 0x8 * i))
+				if(UnityPlayerModule.ModuleMemorySize == 29122560)
 				{
-					for (; table != IntPtr.Zero; table = game.ReadPointer(table + 0x108))
+					vars.Dbg("UnityPlayer size is: 29122560 - Early Access 0.9.0.5?");
+									
+					var UnityPlayerScanner = new SignatureScanner(game, UnityPlayerModule.BaseAddress, UnityPlayerModule.ModuleMemorySize);
+					
+					if (SceneManagerBindings == IntPtr.Zero && (SceneManagerBindings = UnityPlayerScanner.Scan(SceneManagerBindingsSig)) != IntPtr.Zero)
 					{
-						string class_name = new DeepPointer(table + 0x48, 0x0).DerefString(game, 64, "");
-						
-						if (!classes.ContainsKey(class_name))
-							continue;
-						vars.Mono[class_name] = classes[class_name]
-												? new DeepPointer(table + 0x30, 0xD0, 0x8, 0x60).Deref<IntPtr>(game)
-												: new DeepPointer(table + 0xD0, 0x8, 0x60).Deref<IntPtr>(game);
+						//print("Mov instruction of SceneManagerBindings: " + SceneManagerBindings.ToString("X8"));
+						SceneManagerBindings = IntPtr.Add(SceneManagerBindings + 7, game.ReadValue<int>(SceneManagerBindings + 3));
+						print("Found SceneManagerBinding: 0x" + SceneManagerBindings.ToString("X16"));
 					}
-
-					if (vars.Mono.Count == classes.Count)
-						break;
-				}
-
-				vars.Dbg("Exiting mono scan.");
-		
-				Func<string, string> PathToName = (path) =>
-				{
-					if (String.IsNullOrEmpty(path) || !path.StartsWith("Assets/"))
-						return null;
+					
+					vars.SigFound = SceneManagerBindings != IntPtr.Zero;
+					if (!vars.SigFound)
+					{
+						Thread.Sleep(2000);
+						if(SceneManagerBindings == IntPtr.Zero)
+							print("Scene Manager is null");
+					}
 					else
-						return System.Text.RegularExpressions.Regex.Matches(path, @".+/(.+).unity")[0].Groups[1].Value;
-				};
-				
-				foreach(var element in vars.Mono)
-				{
-					vars.Dbg(element);
-				}				
-				
-				if(vars.Mono.ContainsKey("GameManager"))
-				{
-					var gm = vars.Mono["GameManager"];
 					{
-						vars.pointerGameState = gm + 0x0; //gameState 
-						vars.pointerLoadingQuickSave = gm + 0x51; //QuickSaveLoading
+						Func<string, string> PathToName = (path) =>
+						{
+							if (String.IsNullOrEmpty(path) || !path.StartsWith("Assets/"))
+								return null;
+							else
+								return System.Text.RegularExpressions.Regex.Matches(path, @".+/(.+).unity")[0].Groups[1].Value;
+						};
+					
+						vars.UpdateScenes = (Action) (() =>
+						{
+							current.ThisScene = PathToName(new DeepPointer(SceneManagerBindings, 0x48, 0x10, 0x0).DerefString(game, 73)) ?? old.ThisScene;
+							current.NextScene = PathToName(new DeepPointer(SceneManagerBindings, 0x28, 0x0, 0x10, 0x0).DerefString(game, 73)) ?? old.NextScene;
+							current.gameState = new DeepPointer("UnityPlayer.dll", 0x01A19BB0, 0x120, 0x0, 0x48, 0x60, 0x0, 0x60, 0x0).Deref<int>(game);
+							current.loadingQuickSave = new DeepPointer("UnityPlayer.dll", 0x01A19BB0, 0x120, 0x0, 0x48, 0x60, 0x0, 0x60, 0x41).Deref<bool>(game);
+						});
+						break;
 					}
+				}
+				else
+				{
+					vars.Dbg("UnityPlayer size is: " + UnityPlayerModule.ModuleMemorySize);
+					
+					var UnityPlayerScanner = new SignatureScanner(game, UnityPlayerModule.BaseAddress, UnityPlayerModule.ModuleMemorySize);
+			
+					if (SceneManagerBindings == IntPtr.Zero && (SceneManagerBindings = UnityPlayerScanner.Scan(SceneManagerBindingsSig)) != IntPtr.Zero)
+					{
+						//print("Mov instruction of SceneManagerBindings: " + SceneManagerBindings.ToString("X8"));
+						SceneManagerBindings = IntPtr.Add(SceneManagerBindings + 7, game.ReadValue<int>(SceneManagerBindings + 3));
+						print("Found SceneManagerBinding: 0x" + SceneManagerBindings.ToString("X16"));
+					}
+					
+					vars.SigFound = SceneManagerBindings != IntPtr.Zero;
 
+					if (!vars.SigFound)
+					{
+						Thread.Sleep(2000);
+						if(SceneManagerBindings == IntPtr.Zero)
+							print("Scene Manager is null");
+					}
+					else
+					{
+						vars.Dbg("Starting mono scan.");
+						var classes = new Dictionary<string, bool>
+						{
+							{ "GameManager", false /* does this class derive from a Singleton<T> (or similar) */ }
+						};
+						
+						IntPtr loaded_images = new DeepPointer("mono-2.0-bdwgc.dll", 0x49B0C8).Deref<IntPtr>(game);
+						int size = game.ReadValue<int>(loaded_images + 0x18);
+						IntPtr table = new DeepPointer(loaded_images + 0x10, 0x8 * (int)(0xFA381AED % size)).Deref<IntPtr>(game);
+						IntPtr asm_cs_image = IntPtr.Zero;
+						for (; table != IntPtr.Zero; table = game.ReadPointer(table + 0x10))
+						{
+							if (new DeepPointer(table, 0x0).DerefString(game, 32) != "Assembly-CSharp")
+								continue;
+							size = new DeepPointer(table + 0x8, 0x4D8).Deref<int>(game);
+							asm_cs_image = new DeepPointer(table + 0x8, 0x4E0).Deref<IntPtr>(game);
+						}
+						
+						vars.Mono = new Dictionary<string, IntPtr>();
+
+						for (int i = 0; i < size; ++i, table = game.ReadPointer(asm_cs_image + 0x8 * i))
+						{
+							for (; table != IntPtr.Zero; table = game.ReadPointer(table + 0x108))
+							{
+								string class_name = new DeepPointer(table + 0x48, 0x0).DerefString(game, 64, "");
+								
+								if (!classes.ContainsKey(class_name))
+									continue;
+								vars.Mono[class_name] = classes[class_name]
+														? new DeepPointer(table + 0x30, 0xD0, 0x8, 0x60).Deref<IntPtr>(game)
+														: new DeepPointer(table + 0xD0, 0x8, 0x60).Deref<IntPtr>(game);
+							}
+
+							if (vars.Mono.Count == classes.Count)
+								break;
+						}
+
+						vars.Dbg("Exiting mono scan.");
+				
+						Func<string, string> PathToName = (path) =>
+						{
+							if (String.IsNullOrEmpty(path) || !path.StartsWith("Assets/"))
+								return null;
+							else
+								return System.Text.RegularExpressions.Regex.Matches(path, @".+/(.+).unity")[0].Groups[1].Value;
+						};
+						
+						foreach(var element in vars.Mono)
+						{
+							vars.Dbg(element);
+						}				
+						
+						if(vars.Mono.ContainsKey("GameManager"))
+						{
+							var gm = vars.Mono["GameManager"];
+							{
+								vars.pointerGameState = gm + 0x0; //gameState 
+								vars.pointerLoadingQuickSave = gm + 0x51; //QuickSaveLoading
+							}
+
+							vars.UpdateScenes = (Action) (() =>
+							{
+								current.ThisScene = PathToName(new DeepPointer(SceneManagerBindings, 0x48, 0x10, 0x0).DerefString(game, 73)) ?? old.ThisScene;
+								current.NextScene = PathToName(new DeepPointer(SceneManagerBindings, 0x28, 0x0, 0x10, 0x0).DerefString(game, 73)) ?? old.NextScene;
+								current.loadingQuickSave = new DeepPointer(vars.pointerLoadingQuickSave).Deref<bool>(game);
+								current.gameState = new DeepPointer(vars.pointerGameState).Deref<int>(game);
+							});
+							vars.Dbg("Pointers set!");
+							vars.UpdateScenes();
+							vars.Dbg("Current level: " + current.ThisScene);
+							break;
+						}
+						else
+						{
+							vars.Dbg("No Game manager. Exiting... :(");
+							break;
+						}
+					}
+				}
+			}
+			
+			print("Exiting signature thread.");
+		});
+		vars.SigThread.Start();
+	}
+	else
+	{
+		vars.SigThread = new Thread(() =>
+		{
+			print("Starting signature thread.");
+			
+			var SceneManagerBindings = IntPtr.Zero;
+			
+			//SceneManagerBindings::GetActiveScene
+			var SceneManagerBindingsSig = new SigScanTarget(5, "48 83 EC 28" +
+				"E8 ?? ?? ?? ??" +
+				"48 8B C8" +
+				"E8 ?? ?? ?? ??" +
+				"48 85 C0" +
+				"74 08" +
+				"8B 40 08" +
+				"48 83 C4 28" +
+				"C3" +
+				"48 83 C4 28" +
+				"C3");
+			SceneManagerBindingsSig.OnFound = (p, s, ptr) => IntPtr.Add(ptr + 4, p.ReadValue<int>(ptr));
+			
+			
+			var Token = vars.TokenSource.Token;
+			while (!Token.IsCancellationRequested)
+			{
+				var GameModules = game.ModulesWow64Safe();
+				
+				var UnityPlayerModule = GameModules.FirstOrDefault(m => m.ModuleName == "UnityPlayer.dll");
+				
+				if (UnityPlayerModule == null)
+				{
+					Thread.Sleep(2000);
+					continue;
+				}
+				
+				
+				var UnityPlayerScanner = new SignatureScanner(game, UnityPlayerModule.BaseAddress, UnityPlayerModule.ModuleMemorySize);
+					
+				if (SceneManagerBindings == IntPtr.Zero && (SceneManagerBindings = UnityPlayerScanner.Scan(SceneManagerBindingsSig)) != IntPtr.Zero)
+				{
+						//print("Mov instruction of SceneManagerBindings: " + SceneManagerBindings.ToString("X8"));
+					SceneManagerBindings = IntPtr.Add(SceneManagerBindings + 7, game.ReadValue<int>(SceneManagerBindings + 3));
+					print("Found SceneManagerBinding: 0x" + SceneManagerBindings.ToString("X16"));
+				}
+				
+				vars.SigFound = SceneManagerBindings != IntPtr.Zero;
+
+				
+				if(vars.SigFound)
+				{
+					Func<string, string> PathToName = (path) =>
+					{
+						if (String.IsNullOrEmpty(path) || !path.StartsWith("Assets/"))
+							return null;
+						else
+							return System.Text.RegularExpressions.Regex.Matches(path, @".+/(.+).unity")[0].Groups[1].Value;
+					};
+					
 					vars.UpdateScenes = (Action) (() =>
 					{
 						current.ThisScene = PathToName(new DeepPointer(SceneManagerBindings, 0x48, 0x10, 0x0).DerefString(game, 73)) ?? old.ThisScene;
@@ -182,21 +312,13 @@ init
 						current.gameState = new DeepPointer(vars.pointerGameState).Deref<int>(game);
 					});
 					vars.Dbg("Pointers set!");
-					vars.UpdateScenes();
-					vars.Dbg("Current level: " + current.ThisScene);
-					break;
-				}
-				else
-				{
-					vars.Dbg("No Game manager. Exiting... :(");
+					
 					break;
 				}
 			}
-		}
-		
-		print("Exiting signature thread.");
-	});
-	vars.SigThread.Start();
+		});
+		vars.SigThread.Start();
+	}
 }
 
 update
