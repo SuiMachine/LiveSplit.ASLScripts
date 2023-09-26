@@ -4,6 +4,12 @@ state("rf", "Red Faction")
 	string15 level : 0x0246144, 0x0;
 }
 
+state("pf", "Pure Faction")
+{
+	bool isLoading : 0x13756AC;
+	string15 level : 0x0246144, 0x0;
+}
+
 state("rf_120na", "Red Faction")
 {
 	bool isLoading : 0x13756AC;
@@ -25,7 +31,7 @@ init
 	vars.oldBinkMovie = false;
 
 	var procName = game.ProcessName.ToLower();
-	if(procName == "rf" || procName == "rf_120na")
+	if(procName == "rf" || procName == "rf_120na" || procName == "pf")
 	{
 		vars.gameId = 0;
 		vars.BinkPointer = new DeepPointer("binkw32.dll", 0x41BD8);
@@ -39,19 +45,34 @@ init
     vars.mapList = new List<string>();
 }
 
+startup
+{
+	settings.Add("StartsWithRF2", false, "Starts with RF2");
+}
+
 start
 {
 	if(vars.gameId == -1)
 		return false;
 	
-	if(vars.gameId == 0)
+	if (!settings["StartsWithRF2"])
 	{
-		if(current.isLoading != old.isLoading || vars.currentBinkMovie != vars.oldBinkMovie)
-			return !vars.currentBinkMovie && current.level == "l1s1.rfl";
-		return false;
+		if(vars.gameId == 0)
+		{
+			if(current.isLoading != old.isLoading || vars.currentBinkMovie != vars.oldBinkMovie)
+				return !vars.currentBinkMovie && current.level == "l1s1.rfl";
+			return false;
+		}
+		else
+			return false;
 	}
 	else
-		return !current.isLoading && current.level == "l00s1.rfl";
+	{
+		if(vars.gameId == 1)
+			return !current.isLoading && current.level == "l00s1.rfl";
+		else
+			return false;
+	}		
 }
 
 reset
@@ -59,18 +80,28 @@ reset
 	if(vars.gameId == -1)
 		return false;
 	
-	if(vars.gameId == 0)
+	if (!settings["StartsWithRF2"])
 	{
-		if(current.isLoading != old.isLoading || vars.currentBinkMovie != vars.oldBinkMovie)
-			return vars.currentBinkMovie && current.level == "l1s1.rfl";
+		if(vars.gameId == 0)
+		{
+			if(current.isLoading != old.isLoading || vars.currentBinkMovie != vars.oldBinkMovie)
+				return vars.currentBinkMovie && current.level == "l1s1.rfl";
+			else
+				return false;
+		}
 		else
 			return false;
 	}
 	else
 	{
-		if(current.level == "l00s1.rfl" && old.level == "l00s1.rfl" )
-			vars.mapList.Clear();
-		return current.isLoading && current.level == "l00s1.rfl" && old.level != "l00s1.rfl";
+		if(vars.gameId == 1)
+		{
+			if(current.level == "l00s1.rfl" && old.level == "l00s1.rfl" )
+				vars.mapList.Clear();
+			return current.isLoading && current.level == "l00s1.rfl" && old.level != "l00s1.rfl";
+		}
+		else
+			return false;
 	}
 }
 
