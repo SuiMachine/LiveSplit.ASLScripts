@@ -34,6 +34,47 @@ state("RedFactionArmageddon", "GOG")
 
 startup
 {
+	//Settings
+	var splitNames = new string[]
+	{
+		"Armageddon",
+		"Terraformer",
+		"Dig site",
+		"We're not alone",
+		"Outbreak",
+		"Road to Bastion",
+		"Bastion defences",
+		"Water supplies",
+		"Ice Mines",
+		"Infection",
+		"On the run",
+		"The Red Faction",
+		"Relay stations",
+		"Heavy Metal",
+		"The temple",
+		"Hale",
+		"Must go faster",
+		"Marauder defences",
+		"Older enemies",
+		"Air support",
+		"The road less travelled",
+		"Knock knock",
+		"The lair",
+		"Queen",
+		"Armageddon v2",
+		"Reversal of fortune",
+		"End game"
+	};
+	
+	settings.Add("map_change_splits", true, "Map change splits");
+	for(int i=0; i < splitNames.Length; i++)
+	{
+		settings.Add("map_change_number_" + i.ToString(), true, splitNames[i] + " (" + (i+1).ToString() + ")", "map_change_splits");
+	}
+	settings.Add("ending_split", true, "Split at the end");
+
+	
+	//Variables
 	vars.Dbg = (Action<dynamic>) ((output) => print("[Mono ASL] " + output));
 	vars.StartFMVs = new HashSet<string>() { "m01_cs_00.bik" };
 	vars.CompletedMaps = new bool[256];
@@ -125,16 +166,17 @@ split
 			else
 			{
 				vars.CompletedMaps[current.map] = true;
-				vars.Dbg("Split case 1");
-				return true;
+				vars.Dbg("Split case 1. Map ID: " + current.map);
+				var splitSetting = settings["map_change_number_" + (current.map - 1)];
+				return splitSetting;
 			}
 		}
 	}
     
 	if (!current.fmv && old.fmv && !string.IsNullOrWhiteSpace(vars.last_fmv) && (vars.last_fmv.ToLower() == "m17_mo_theend_cs_19.bik" || vars.last_fmv.ToLower() == "dlc04_m04_end.bik"))
 	{
-		vars.Dbg("Split 2");
-		return true;
+		vars.Dbg("Split Ending");
+		return settings["ending_split"];
 	}
 	
 	return false;
