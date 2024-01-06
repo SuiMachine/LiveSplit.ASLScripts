@@ -184,7 +184,7 @@ split
 
 isLoading
 {
-	return (current.loading || current.fmv || current.map == -1);
+	return (current.loading && !current.fmv || current.map == -1);
 }
 
 exit
