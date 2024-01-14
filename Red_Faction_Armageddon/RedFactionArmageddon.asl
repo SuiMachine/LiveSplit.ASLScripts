@@ -1,35 +1,34 @@
 //This was originally written by Rythin
-
 state("RedFactionArmageddon_DX11", "Steam")
 {
-	bool loading:      0x1CEA928;  //1 on loads and fmvs leading to a load
-	int map:           0x98DE28;   //0-27 on the according levels, -1 during load
-	bool fmv:          0x121CDB8;  //1 in fmv cutscenes
-	string25 fmv_name: 0x996BA8;   //the filename of the fmv currently playing
+	bool isLoading:				0xC0DBD3;   //1 on loads and fmvs leading to a load
+	int pseudoLoadScreenState:	0xC0DB80;   //0 - just loading (unless loading is 0^^), 1 when fading from black, 2 when showing FMV, 3 when fading to black
+	int map:					0x98DE28;   //0-27 on the according levels, -1 during load
+	string25 fmv_name:			0x996BA8;   //the filename of the fmv currently playing
 }
 
 state("RedFactionArmageddon", "Steam")
 {
-	bool loading:      0xC1C653;
-	int map:           0x99DE28;
-	bool fmv:          0x122B82B;
-	string25 fmv_name: 0x9A6BA8;
+	bool isLoading:				0xC1C653;
+	int pseudoLoadScreenState:	0xC1C600;
+	int map:					0x99DE28;
+	string25 fmv_name:			0x9A6BA8;
 }
 
 state("RedFactionArmageddon_DX11", "GOG")
 {
-	bool loading:      0x1CF7D28;
-	int map:           0x99BE28;
-	bool fmv:          0x9A4C8C;
-	string25 fmv_name: 0x9A4BF8;
+	bool isLoading:				0xC1AF53;
+	int pseudoLoadScreenState:	0xC1AF00;
+	int map:					0x99BE28;
+	string25 fmv_name:			0x9A4BF8;
 }
 
 state("RedFactionArmageddon", "GOG")
 {
-	bool loading:      0x1D07828;
-	int map:           0x9ACE28;
-	bool fmv:          0x9B5C8C;
-	string25 fmv_name: 0x9B5BF8;
+	bool isLoading:				0xC2AA53;
+	int pseudoLoadScreenState:	0xC2AA00;
+	int map:					0x9ACE28;
+	string25 fmv_name:			0x9B5BF8;
 }
 
 startup
@@ -93,7 +92,6 @@ startup
 	timer.OnStart += vars.TimerStart;
 	
 	vars.last_fmv = "";
-	vars.sw = new Stopwatch();
 }
 
 init
@@ -114,23 +112,17 @@ init
 
 update
 {
-	if (current.fmv && !old.fmv)
-	{
-		vars.sw.Restart();
-	}
-	
-	if (vars.sw.ElapsedMilliseconds > 900)
+	if (current.pseudoLoadScreenState == 2)
 	{
 		vars.last_fmv = current.fmv_name;
-		vars.sw.Reset();
 	}
 }
 
 reset
 {
-	if (current.map != old.map || current.loading != old.loading || current.fmv != old.fmv)
+	if (current.map != old.map || current.isLoading != old.isLoading || current.pseudoLoadScreenState != old.pseudoLoadScreenState)
 	{
-		if(current.loading && vars.StartFMVs.Contains(current.fmv_name))
+		if(current.isLoading && current.pseudoLoadScreenState == 2 && vars.StartFMVs.Contains(current.fmv_name))
 		{
 			return true;
 		}
@@ -141,9 +133,9 @@ reset
 
 start
 {
-	if (current.map != old.map || current.loading != old.loading || current.fmv != old.fmv)
+	if (current.map != old.map || current.isLoading != old.isLoading || current.pseudoLoadScreenState != old.pseudoLoadScreenState)
 	{
-		if(!current.loading && !current.fmv && (current.map == 0 || current.map == 1))
+		if(old.isLoading && !current.isLoading && (current.map == 0 || current.map == 1))
 		{
 			vars.Dbg("Starting");
 			return true;
@@ -173,7 +165,7 @@ split
 		}
 	}
     
-	if (!current.fmv && old.fmv && !string.IsNullOrWhiteSpace(vars.last_fmv) && (vars.last_fmv.ToLower() == "m17_mo_theend_cs_19.bik" || vars.last_fmv.ToLower() == "dlc04_m04_end.bik"))
+	if (current.pseudoLoadScreenState > 0 && !string.IsNullOrWhiteSpace(vars.last_fmv) && (vars.last_fmv.ToLower() == "m17_mo_theend_cs_19.bik" || vars.last_fmv.ToLower() == "dlc04_m04_end.bik"))
 	{
 		vars.Dbg("Split Ending");
 		return settings["ending_split"];
@@ -184,7 +176,7 @@ split
 
 isLoading
 {
-	return (current.loading && !current.fmv || current.map == -1);
+	return (current.isLoading && (current.pseudoLoadScreenState == 0 || current.pseudoLoadScreenState == 1 || current.pseudoLoadScreenState == 3));
 }
 
 exit
