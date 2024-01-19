@@ -1,7 +1,7 @@
 //This was originally written by Rythin
 state("RedFactionArmageddon_DX11", "Steam")
 {
-	bool isLoading:				0xC0DBD3;   //1 on loads and fmvs leading to a load
+	bool isGameplay:			0xC0DBD0;   //1 on loads and fmvs leading to a load
 	int pseudoLoadScreenState:	0xC0DB80;   //0 - just loading (unless loading is 0^^), 1 when fading from black, 2 when showing FMV, 3 when fading to black
 	int map:					0x98DE28;   //0-27 on the according levels, -1 during load
 	string25 fmv_name:			0x996BA8;   //the filename of the fmv currently playing
@@ -9,7 +9,7 @@ state("RedFactionArmageddon_DX11", "Steam")
 
 state("RedFactionArmageddon", "Steam")
 {
-	bool isLoading:				0xC1C653;
+	bool isGameplay:			0xC1C650;
 	int pseudoLoadScreenState:	0xC1C600;
 	int map:					0x99DE28;
 	string25 fmv_name:			0x9A6BA8;
@@ -17,7 +17,7 @@ state("RedFactionArmageddon", "Steam")
 
 state("RedFactionArmageddon_DX11", "GOG")
 {
-	bool isLoading:				0xC1AF53;
+	bool isGameplay:			0xC1AF50;
 	int pseudoLoadScreenState:	0xC1AF00;
 	int map:					0x99BE28;
 	string25 fmv_name:			0x9A4BF8;
@@ -25,7 +25,7 @@ state("RedFactionArmageddon_DX11", "GOG")
 
 state("RedFactionArmageddon", "GOG")
 {
-	bool isLoading:				0xC2AA53;
+	bool isGameplay:			0xC2AA50;
 	int pseudoLoadScreenState:	0xC2AA00;
 	int map:					0x9ACE28;
 	string25 fmv_name:			0x9B5BF8;
@@ -120,9 +120,9 @@ update
 
 reset
 {
-	if (current.map != old.map || current.isLoading != old.isLoading || current.pseudoLoadScreenState != old.pseudoLoadScreenState)
+	if (current.map != old.map || !current.isGameplay != old.isGameplay || current.pseudoLoadScreenState != old.pseudoLoadScreenState)
 	{
-		if(current.isLoading && current.pseudoLoadScreenState == 2 && vars.StartFMVs.Contains(current.fmv_name))
+		if(!current.isGameplay && current.pseudoLoadScreenState == 2 && vars.StartFMVs.Contains(current.fmv_name))
 		{
 			return true;
 		}
@@ -133,9 +133,9 @@ reset
 
 start
 {
-	if (current.map != old.map || current.isLoading != old.isLoading || current.pseudoLoadScreenState != old.pseudoLoadScreenState)
+	if (current.map != old.map || current.isGameplay != old.isGameplay || current.pseudoLoadScreenState != old.pseudoLoadScreenState)
 	{
-		if(old.isLoading && !current.isLoading && (current.map == 0 || current.map == 1))
+		if(!old.isGameplay && current.isGameplay && (current.map == 0 || current.map == 1))
 		{
 			vars.Dbg("Starting");
 			return true;
@@ -176,7 +176,7 @@ split
 
 isLoading
 {
-	return (current.isLoading && (current.pseudoLoadScreenState == 0 || current.pseudoLoadScreenState == 1 || current.pseudoLoadScreenState == 3));
+	return (!current.isGameplay && (current.pseudoLoadScreenState == 0 || current.pseudoLoadScreenState == 1 || current.pseudoLoadScreenState == 3));
 }
 
 exit
