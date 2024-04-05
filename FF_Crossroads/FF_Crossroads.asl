@@ -8,7 +8,7 @@ state("ffcrossroads")
 
 init
 {
-	vars.previousKurwaState = false;
+	//vars.previousKurwaState = false;
 }
 
 isLoading
@@ -18,9 +18,9 @@ isLoading
 
 update
 {
-	if(timer.IsGameTimePaused != vars.previousKurwaState)
-	{
-		print("[" + timer.CurrentTime.RealTime.ToString() + "] State change " + timer.IsGameTimePaused.ToString());
-	}
-	vars.previousKurwaState = timer.IsGameTimePaused;
+	//if(timer.IsGameTimePaused != vars.previousKurwaState)
+	//{
+		//print("[" + timer.CurrentTime.RealTime.ToString() + "] State change " + timer.IsGameTimePaused.ToString());
+	//}
+	//vars.previousKurwaState = timer.IsGameTimePaused;
 }
