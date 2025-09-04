@@ -248,82 +248,111 @@ init
 	}
 	else
 	{
+		print("Is il2cpp");
 		vars.SigThread = new Thread(() =>
 		{
 			print("Starting signature thread.");
-			
+			Func<string, string> PathToName = (path) =>
+			{
+				if (String.IsNullOrEmpty(path) || !path.StartsWith("Assets/"))
+					return null;
+				else
+					return System.Text.RegularExpressions.Regex.Matches(path, @".+/(.+).unity")[0].Groups[1].Value;
+			};
+
 			var SceneManagerBindings = IntPtr.Zero;
+			var GameModules = game.ModulesWow64Safe();
+
+			var gameAssemblyModule = GameModules.FirstOrDefault(x => x.ModuleName.ToLower() == "gameassembly.dll");
+			if(gameAssemblyModule == null)
+			{
+				print("Failed to find gameassembly module!");
+			}
+
+			var gameAssemblyModuleSize = gameAssemblyModule.ModuleMemorySize;
+
 			
 			//SceneManagerBindings::GetActiveScene
-			var SceneManagerBindingsSig = new SigScanTarget(5, "48 83 EC 28" +
-				"E8 ?? ?? ?? ??" +
-				"48 8B C8" +
-				"E8 ?? ?? ?? ??" +
-				"48 85 C0" +
-				"74 08" +
-				"8B 40 08" +
-				"48 83 C4 28" +
-				"C3" +
-				"48 83 C4 28" +
-				"C3");
-			SceneManagerBindingsSig.OnFound = (p, s, ptr) => IntPtr.Add(ptr + 4, p.ReadValue<int>(ptr));
-			
-			
-			var Token = vars.TokenSource.Token;
-			while (!Token.IsCancellationRequested)
+			if(gameAssemblyModuleSize == 49774592)
 			{
-				var GameModules = game.ModulesWow64Safe();
-				
-				var UnityPlayerModule = GameModules.FirstOrDefault(m => m.ModuleName == "UnityPlayer.dll");
-				
-				if (UnityPlayerModule == null)
-				{
-					Thread.Sleep(2000);
-					continue;
-				}
-				
-				
-				var UnityPlayerScanner = new SignatureScanner(game, UnityPlayerModule.BaseAddress, UnityPlayerModule.ModuleMemorySize);
-					
-				if (SceneManagerBindings == IntPtr.Zero && (SceneManagerBindings = UnityPlayerScanner.Scan(SceneManagerBindingsSig)) != IntPtr.Zero)
-				{
-						//print("Mov instruction of SceneManagerBindings: " + SceneManagerBindings.ToString("X8"));
-					SceneManagerBindings = IntPtr.Add(SceneManagerBindings + 7, game.ReadValue<int>(SceneManagerBindings + 3));
-					vars.Dbg("Found SceneManagerBinding: 0x" + SceneManagerBindings.ToString("X16"));
-				}
-				
-				vars.SigFound = SceneManagerBindings != IntPtr.Zero;
+				print("Using 1.3 ill2cpp");
+				var pointerGameState = new DeepPointer("GameAssembly.dll", 0x290E500, 0xB8, 0x4);
+				//var pointerLoadingSave = new DeepPointer("GameAssembly.dll", 0x10E8750, 0xB8, 0x51);
 
-				
-				if(vars.SigFound)
+				vars.UpdateScenes = (Action) (() =>
 				{
-					var size = GameModules.FirstOrDefault(m => m.ModuleName == "GameAssembly.dll").ModuleMemorySize;
-					vars.Dbg("Game assembly module size is: " + size.ToString());
+					current.ThisScene = PathToName(new DeepPointer("UnityPlayer.dll", 0x1C98430, 0x48, 0x10, 0x0).DerefString(game, 73)) ?? old.ThisScene;
+					current.NextScene = PathToName(new DeepPointer("UnityPlayer.dll", 0x1C98430, 0x28, 0x0, 0x10, 0x0).DerefString(game, 73)) ?? old.NextScene;
+					current.loadingQuickSave = false;
+					current.gameState = pointerGameState.Deref<int>(game);
+				});
+				vars.SigFound = true;
+			}
+			else
+			{
+				print("Using old ill2cpp - module size was: " + gameAssemblyModuleSize.ToString());
+				var SceneManagerBindingsSig = new SigScanTarget(5, "48 83 EC 28" +
+					"E8 ?? ?? ?? ??" +
+					"48 8B C8" +
+					"E8 ?? ?? ?? ??" +
+					"48 85 C0" +
+					"74 08" +
+					"8B 40 08" +
+					"48 83 C4 28" +
+					"C3" +
+					"48 83 C4 28" +
+					"C3");
+				SceneManagerBindingsSig.OnFound = (p, s, ptr) => IntPtr.Add(ptr + 4, p.ReadValue<int>(ptr));
+			
+			
+				var Token = vars.TokenSource.Token;
+				while (!Token.IsCancellationRequested)
+				{					
+					var UnityPlayerModule = GameModules.FirstOrDefault(m => m.ModuleName == "UnityPlayer.dll");
 					
-					//There is probably going to be a switch here later on when game updates
-					var pointerGameState = new DeepPointer("GameAssembly.dll", 0x10E8750, 0xB8, 0x0);
-					var pointerLoadingSave = new DeepPointer("GameAssembly.dll", 0x10E8750, 0xB8, 0x51);
-					
-					Func<string, string> PathToName = (path) =>
+					if (UnityPlayerModule == null)
 					{
-						if (String.IsNullOrEmpty(path) || !path.StartsWith("Assets/"))
-							return null;
-						else
-							return System.Text.RegularExpressions.Regex.Matches(path, @".+/(.+).unity")[0].Groups[1].Value;
-					};
+						Thread.Sleep(2000);
+						continue;
+					}
 					
-					vars.UpdateScenes = (Action) (() =>
+					
+					var UnityPlayerScanner = new SignatureScanner(game, UnityPlayerModule.BaseAddress, UnityPlayerModule.ModuleMemorySize);
+						
+					if (SceneManagerBindings == IntPtr.Zero && (SceneManagerBindings = UnityPlayerScanner.Scan(SceneManagerBindingsSig)) != IntPtr.Zero)
 					{
-						current.ThisScene = PathToName(new DeepPointer(SceneManagerBindings, 0x48, 0x10, 0x0).DerefString(game, 73)) ?? old.ThisScene;
-						current.NextScene = PathToName(new DeepPointer(SceneManagerBindings, 0x28, 0x0, 0x10, 0x0).DerefString(game, 73)) ?? old.NextScene;
-						current.loadingQuickSave = pointerLoadingSave.Deref<bool>(game);
-						current.gameState = pointerGameState.Deref<int>(game);
-					});
-					vars.Dbg("Pointers set!");
+							//print("Mov instruction of SceneManagerBindings: " + SceneManagerBindings.ToString("X8"));
+						SceneManagerBindings = IntPtr.Add(SceneManagerBindings + 7, game.ReadValue<int>(SceneManagerBindings + 3));
+						vars.Dbg("Found SceneManagerBinding: 0x" + SceneManagerBindings.ToString("X16"));
+					}
 					
-					break;
+					vars.SigFound = SceneManagerBindings != IntPtr.Zero;
+
+					
+					if(vars.SigFound)
+					{
+						var size = GameModules.FirstOrDefault(m => m.ModuleName == "GameAssembly.dll").ModuleMemorySize;
+						vars.Dbg("Game assembly module size is: " + size.ToString());
+						
+						//There is probably going to be a switch here later on when game updates
+						var pointerGameState = new DeepPointer("GameAssembly.dll", 0x10E8750, 0xB8, 0x0);
+						var pointerLoadingSave = new DeepPointer("GameAssembly.dll", 0x10E8750, 0xB8, 0x51);
+
+						vars.UpdateScenes = (Action) (() =>
+						{
+							current.ThisScene = PathToName(new DeepPointer(SceneManagerBindings, 0x48, 0x10, 0x0).DerefString(game, 73)) ?? old.ThisScene;
+							current.NextScene = PathToName(new DeepPointer(SceneManagerBindings, 0x28, 0x0, 0x10, 0x0).DerefString(game, 73)) ?? old.NextScene;
+							current.loadingQuickSave = pointerLoadingSave.Deref<bool>(game);
+							current.gameState = pointerGameState.Deref<int>(game);
+						});
+						vars.Dbg("Pointers set!");
+						
+						break;
+					}
 				}
 			}
+
+
 		});
 		vars.SigThread.Start();
 	}
