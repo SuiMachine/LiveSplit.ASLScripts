@@ -1,7 +1,7 @@
 state("SoF2")
 {
 	string20 level : 0x7820DD;
-	bool skippingCin: 0x409680;
+	float timeScale : 0x3FA514; //timescale is 1000 when skipping cutscene
 }
 
 init
@@ -17,7 +17,7 @@ update
 start
 {
 	if(settings["startOnCutscene"])
-		return current.level == "pra2.bsp" && !current.skippingCin && old.skippingCin;
+		return current.level == "pra2.bsp" && current.timeScale == 1000 && old.timeScale == 1;
 	else
 		return current.level == "pra2.bsp" && vars.cGamexTick != 0;
 }
@@ -34,7 +34,7 @@ split
 
 isLoading
 {
-	return vars.cGamexTick == 0 || (settings["pauseOnCutscene"] && current.skippingCin );
+	return vars.cGamexTick == 0 || (settings["pauseOnCutscene"] && current.timeScale == 1000 );
 }
 
 startup
